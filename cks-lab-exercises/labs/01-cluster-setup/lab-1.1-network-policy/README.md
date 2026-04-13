@@ -1,0 +1,219 @@
+# Lab 1.1 – NetworkPolicy Default Deny
+
+**Domain:** Cluster Setup (15%)
+**Thời gian ước tính:** 20 phút
+**Độ khó:** Trung bình
+
+---
+
+## Mục tiêu
+
+- Tạo NetworkPolicy chặn toàn bộ ingress và egress mặc định trong namespace `lab-network`
+- Tạo NetworkPolicy cho phép traffic có chọn lọc từ namespace `frontend` đến namespace `backend` trên port 8080
+- Hiểu cách namespace selector và pod selector hoạt động trong NetworkPolicy
+
+---
+
+## Bối cảnh
+
+Bạn là kỹ sư bảo mật tại một công ty fintech. Hệ thống microservice đang chạy trong Kubernetes cluster với nhiều namespace. Theo yêu cầu bảo mật, mọi traffic giữa các namespace phải bị chặn theo mặc định (default deny), và chỉ các kết nối được phê duyệt rõ ràng mới được phép.
+
+Nhiệm vụ của bạn là cấu hình NetworkPolicy cho namespace `lab-network` để:
+1. Chặn toàn bộ ingress traffic mặc định
+2. Chặn toàn bộ egress traffic mặc định
+3. Chỉ cho phép traffic từ namespace `frontend-ns` đến namespace `backend-ns` trên port 8080
+
+---
+
+## Yêu cầu môi trường
+
+- Kubernetes cluster >= 1.29 với CNI hỗ trợ NetworkPolicy (Calico, Cilium, Weave, v.v.)
+- `kubectl` đã được cấu hình và kết nối đến cluster
+- Quyền tạo namespace và NetworkPolicy
+
+Chạy script khởi tạo môi trường:
+
+```bash
+bash setup.sh
+```
+
+---
+
+## Các bước thực hiện
+
+### Bước 1: Kiểm tra môi trường
+
+```bash
+# Xác nhận các namespace đã được tạo
+kubectl get namespaces | grep -E 'lab-network|frontend-ns|backend-ns'
+
+# Xem các pod đang chạy
+kubectl get pods -n backend-ns
+kubectl get pods -n frontend-ns
+```
+
+### Bước 2: Tạo NetworkPolicy chặn toàn bộ ingress trong `lab-network`
+
+Tạo file `deny-all-ingress.yaml`:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+  namespace: lab-network
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+```
+
+Áp dụng:
+
+```bash
+kubectl apply -f deny-all-ingress.yaml
+```
+
+### Bước 3: Tạo NetworkPolicy chặn toàn bộ egress trong `lab-network`
+
+Tạo file `deny-all-egress.yaml`:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-egress
+  namespace: lab-network
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+```
+
+Áp dụng:
+
+```bash
+kubectl apply -f deny-all-egress.yaml
+```
+
+### Bước 4: Tạo NetworkPolicy cho phép traffic cụ thể
+
+Tạo NetworkPolicy cho phép traffic từ `frontend-ns` đến `backend-ns` trên port 8080:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-backend
+  namespace: backend-ns
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: frontend-ns
+    ports:
+    - protocol: TCP
+      port: 8080
+EOF
+```
+
+### Bước 5: Kiểm tra NetworkPolicy đã được tạo
+
+```bash
+kubectl get networkpolicy -n lab-network
+kubectl get networkpolicy -n backend-ns
+kubectl describe networkpolicy deny-all-ingress -n lab-network
+```
+
+### Bước 6: Xác minh kết quả
+
+```bash
+bash verify.sh
+```
+
+---
+
+## Tiêu chí kiểm tra
+
+- [ ] NetworkPolicy `deny-all-ingress` tồn tại trong namespace `lab-network`
+- [ ] NetworkPolicy `deny-all-egress` tồn tại trong namespace `lab-network`
+- [ ] Có NetworkPolicy cho phép traffic từ `frontend-ns` đến `backend-ns` trên port 8080
+
+---
+
+## Gợi ý
+
+<details>
+<summary>Gợi ý 1: podSelector rỗng có nghĩa là gì?</summary>
+
+`podSelector: {}` (selector rỗng) áp dụng policy cho **tất cả** pod trong namespace đó. Đây là cách tạo default deny policy hiệu quả nhất.
+
+</details>
+
+<details>
+<summary>Gợi ý 2: Cách label namespace để dùng namespaceSelector</summary>
+
+Từ Kubernetes 1.21+, mỗi namespace tự động có label `kubernetes.io/metadata.name: <tên-namespace>`. Bạn có thể dùng label này trực tiếp trong `namespaceSelector` mà không cần thêm label thủ công.
+
+```bash
+kubectl get namespace frontend-ns --show-labels
+```
+
+</details>
+
+<details>
+<summary>Gợi ý 3: Thứ tự áp dụng NetworkPolicy</summary>
+
+NetworkPolicy là **additive** — nhiều policy cùng áp dụng cho một pod sẽ được OR với nhau. Không có thứ tự ưu tiên. Nếu bất kỳ policy nào cho phép traffic, traffic đó được phép.
+
+</details>
+
+---
+
+## Giải pháp mẫu
+
+<details>
+<summary>Xem giải pháp đầy đủ (chỉ mở sau khi đã thử)</summary>
+
+Xem file [solution/solution.md](solution/solution.md) để có YAML đầy đủ và giải thích chi tiết.
+
+</details>
+
+---
+
+## Giải thích
+
+### Tại sao cần Default Deny?
+
+Theo mặc định, Kubernetes **không** hạn chế traffic giữa các pod. Bất kỳ pod nào cũng có thể giao tiếp với bất kỳ pod nào khác trong cluster. Đây là rủi ro bảo mật nghiêm trọng trong môi trường production.
+
+Default deny policy thực hiện nguyên tắc **least privilege** ở tầng mạng:
+- Chặn tất cả traffic trước
+- Chỉ mở những kết nối thực sự cần thiết
+
+### Ingress vs Egress
+
+- **Ingress**: Traffic đi vào pod (ai được phép gọi đến pod này?)
+- **Egress**: Traffic đi ra từ pod (pod này được phép gọi đến đâu?)
+
+Cần chặn cả hai hướng để có bảo mật toàn diện.
+
+### Namespace Selector vs Pod Selector
+
+- `namespaceSelector`: Chọn traffic từ/đến namespace cụ thể
+- `podSelector`: Chọn traffic từ/đến pod có label cụ thể
+- Kết hợp cả hai: Traffic phải thỏa mãn **cả hai** điều kiện (AND logic)
+
+---
+
+## Tham khảo
+
+- [Kubernetes NetworkPolicy Documentation](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
+- [NetworkPolicy Editor (visualizer)](https://editor.networkpolicy.io/)
+- [CKS Exam Curriculum – Cluster Setup](https://training.linuxfoundation.org/certification/certified-kubernetes-security-specialist/)
+- [Calico NetworkPolicy Tutorial](https://docs.tigera.io/calico/latest/network-policy/get-started/kubernetes-policy/kubernetes-policy-basic)

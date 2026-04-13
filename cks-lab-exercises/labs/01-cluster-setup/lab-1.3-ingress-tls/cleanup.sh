@@ -1,0 +1,36 @@
+#!/bin/bash
+# Lab 1.3 – Ingress TLS
+# Script dọn dẹp môi trường lab
+
+echo "=========================================="
+echo " Lab 1.3 – Dọn dẹp môi trường"
+echo "=========================================="
+echo ""
+
+if ! command -v kubectl &>/dev/null; then
+  echo "[ERROR] kubectl không tìm thấy."
+  exit 1
+fi
+
+if ! kubectl cluster-info &>/dev/null; then
+  echo "[ERROR] Không thể kết nối đến cluster."
+  exit 1
+fi
+
+echo "Xóa namespace tls-lab (bao gồm tất cả tài nguyên bên trong)..."
+
+if kubectl get namespace tls-lab &>/dev/null; then
+  kubectl delete namespace tls-lab --ignore-not-found=true
+  echo "[OK] Namespace 'tls-lab' đã được xóa."
+else
+  echo "[SKIP] Namespace 'tls-lab' không tồn tại."
+fi
+
+echo ""
+echo "=========================================="
+echo " Dọn dẹp hoàn tất!"
+echo "=========================================="
+echo ""
+echo "Cluster đã được reset về trạng thái ban đầu."
+echo "Bạn có thể chạy lại setup.sh để bắt đầu lại bài lab."
+echo ""
