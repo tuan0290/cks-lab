@@ -81,7 +81,6 @@ spec:
     image: nginx:1.25-alpine
     ports:
     - containerPort: 80
-    - containerPort: 8080
 EOF
 
 echo "[OK] backend-pod đã được tạo trong backend-ns."

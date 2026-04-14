@@ -57,7 +57,7 @@ kubectl apply -f deny-all-egress.yaml
 
 ---
 
-## NetworkPolicy 3: Cho phép traffic từ `frontend-ns` đến `backend-ns` port 8080
+## NetworkPolicy 3: Cho phép traffic từ `frontend-ns` đến `backend-ns` port 80
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -76,13 +76,13 @@ spec:
           kubernetes.io/metadata.name: frontend-ns   # Chỉ cho phép từ namespace frontend-ns
     ports:
     - protocol: TCP
-      port: 8080                 # Chỉ cho phép trên port 8080
+      port: 80                   # Port nginx lắng nghe
 ```
 
 **Giải thích:**
 - Policy này đặt trong `backend-ns` — namespace nhận traffic
 - `namespaceSelector` dùng label tự động `kubernetes.io/metadata.name` (có từ K8s 1.21+)
-- Chỉ traffic từ `frontend-ns` đến port 8080 mới được phép; tất cả traffic khác bị chặn
+- Chỉ traffic từ `frontend-ns` đến port 80 mới được phép; tất cả traffic khác bị chặn
 
 Áp dụng:
 ```bash

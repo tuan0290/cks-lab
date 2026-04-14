@@ -9,7 +9,7 @@
 ## Mục tiêu
 
 - Tạo NetworkPolicy chặn toàn bộ ingress và egress mặc định trong namespace `lab-network`
-- Tạo NetworkPolicy cho phép traffic có chọn lọc từ namespace `frontend` đến namespace `backend` trên port 8080
+- Tạo NetworkPolicy cho phép traffic có chọn lọc từ namespace `frontend` đến namespace `backend` trên port 80
 - Hiểu cách namespace selector và pod selector hoạt động trong NetworkPolicy
 
 ---
@@ -21,7 +21,7 @@ Bạn là kỹ sư bảo mật tại một công ty fintech. Hệ thống micros
 Nhiệm vụ của bạn là cấu hình NetworkPolicy cho namespace `lab-network` để:
 1. Chặn toàn bộ ingress traffic mặc định
 2. Chặn toàn bộ egress traffic mặc định
-3. Chỉ cho phép traffic từ namespace `frontend-ns` đến namespace `backend-ns` trên port 8080
+3. Chỉ cho phép traffic từ namespace `frontend-ns` đến namespace `backend-ns` trên port 80
 
 ---
 
@@ -98,7 +98,7 @@ kubectl apply -f deny-all-egress.yaml
 
 ### Bước 4: Tạo NetworkPolicy cho phép traffic cụ thể
 
-Tạo NetworkPolicy cho phép traffic từ `frontend-ns` đến `backend-ns` trên port 8080:
+Tạo NetworkPolicy cho phép traffic từ `frontend-ns` đến `backend-ns` trên port 80:
 
 ```bash
 kubectl apply -f - <<EOF
@@ -118,7 +118,7 @@ spec:
           kubernetes.io/metadata.name: frontend-ns
     ports:
     - protocol: TCP
-      port: 8080
+      port: 80
 EOF
 ```
 
@@ -142,7 +142,7 @@ bash verify.sh
 
 - [ ] NetworkPolicy `deny-all-ingress` tồn tại trong namespace `lab-network`
 - [ ] NetworkPolicy `deny-all-egress` tồn tại trong namespace `lab-network`
-- [ ] Có NetworkPolicy cho phép traffic từ `frontend-ns` đến `backend-ns` trên port 8080
+- [ ] Có NetworkPolicy cho phép traffic từ `frontend-ns` đến `backend-ns` trên port 80
 
 ---
 
@@ -217,3 +217,146 @@ Cần chặn cả hai hướng để có bảo mật toàn diện.
 - [NetworkPolicy Editor (visualizer)](https://editor.networkpolicy.io/)
 - [CKS Exam Curriculum – Cluster Setup](https://training.linuxfoundation.org/certification/certified-kubernetes-security-specialist/)
 - [Calico NetworkPolicy Tutorial](https://docs.tigera.io/calico/latest/network-policy/get-started/kubernetes-policy/kubernetes-policy-basic)
+
+---
+
+## Hỏi & Đáp
+
+### Q1: Nếu deny ingress và egress cả 2 namespace frontend và backend, nhưng chỉ mở ingress phía backend — frontend có gọi được đến backend không?
+
+**Không.** Frontend sẽ **không** gọi được đến backend trong trường hợp này.
+
+**Giải thích:**
+
+NetworkPolicy trong Kubernetes là **stateless** và hoạt động **độc lập trên từng namespace**. Một kết nối TCP thành công cần **cả 2 chiều đều được phép**:
+
+```
+frontend pod  ──[egress]──►  backend pod  ──[ingress]──►  nhận request
+```
+
+Khi `frontend-ns` có `deny-all-egress`, traffic bị chặn **ngay tại nguồn** — packet không bao giờ rời khỏi frontend pod. Dù backend có mở ingress hay không cũng không có tác dụng vì packet chưa đến được backend.
+
+**Để kết nối thông, cần mở đủ cả 2 phía:**
+
+| Namespace | Policy cần có |
+|-----------|--------------|
+| `frontend-ns` | Egress cho phép đến `backend-ns` port 80 |
+| `backend-ns` | Ingress cho phép từ `frontend-ns` port 80 |
+
+**Ví dụ cấu hình đúng:**
+
+```yaml
+# Phía frontend-ns: mở egress đến backend-ns
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-to-backend
+  namespace: frontend-ns
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: backend-ns
+    ports:
+    - protocol: TCP
+      port: 80
+```
+
+```yaml
+# Phía backend-ns: mở ingress từ frontend-ns
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-from-frontend
+  namespace: backend-ns
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: frontend-ns
+    ports:
+    - protocol: TCP
+      port: 80
+```
+
+> **Lưu ý quan trọng:** Đừng quên mở thêm egress DNS (UDP port 53) cho frontend nếu nó cần resolve hostname — nếu không, DNS lookup cũng sẽ bị chặn và kết nối thất bại ngay cả khi đã mở egress đến backend.
+
+```yaml
+# Thêm vào egress của frontend-ns để DNS hoạt động
+egress:
+- ports:
+  - protocol: UDP
+    port: 53
+```
+
+---
+
+### Q2: Làm sao chứng minh frontend gọi được (hoặc không gọi được) đến backend?
+
+**Bước 1: Lấy IP của backend pod**
+
+```bash
+BACKEND_IP=$(kubectl get pod backend-pod -n backend-ns -o jsonpath='{.status.podIP}')
+echo "Backend IP: $BACKEND_IP"
+```
+
+**Bước 2: Test kết nối từ frontend pod (1 lệnh, không cần vào shell)**
+
+```bash
+# Test port 80 — nginx lắng nghe ở đây
+kubectl exec frontend-pod -n frontend-ns -- wget -qO- --timeout=3 http://$BACKEND_IP:80
+
+# Hoặc dùng nc để test TCP connect thuần (không cần HTTP response)
+kubectl exec frontend-pod -n frontend-ns -- nc -zv $BACKEND_IP 80
+```
+
+---
+
+**Kết quả mong đợi theo từng trường hợp:**
+
+| Tình huống | Kết quả | Giải thích |
+|-----------|---------|------------|
+| Chưa có NetworkPolicy nào | ✅ Thông — HTML nginx | Mặc định K8s cho phép tất cả |
+| Chỉ deny-all-egress ở `frontend-ns` | ❌ Timeout | Packet bị chặn ngay tại frontend, không đi được |
+| Chỉ deny-all-ingress ở `backend-ns` | ❌ Timeout | Packet đến nơi nhưng bị chặn tại backend |
+| Mở egress `frontend-ns` + ingress `backend-ns` port 80 | ✅ Thông — HTML nginx | Cả 2 chiều được phép |
+
+---
+
+**Output khi KHÔNG thông:**
+
+```
+wget: download timed out
+# hoặc
+nc: connect to 10.244.1.5 port 80 (tcp) timed out: Operation timed out
+```
+
+**Output khi THÔNG:**
+
+```html
+<!DOCTYPE html>
+<html>
+<head><title>Welcome to nginx!</title></head>
+...
+```
+
+---
+
+**Tip: Test nhanh bằng pod tạm (không cần pod có sẵn)**
+
+```bash
+# Tạo pod curl tạm trong frontend-ns, test xong tự xóa
+kubectl run test-curl -n frontend-ns \
+  --image=curlimages/curl:8.5.0 \
+  --restart=Never \
+  --rm -it \
+  -- curl -m 3 http://$BACKEND_IP:80
+```

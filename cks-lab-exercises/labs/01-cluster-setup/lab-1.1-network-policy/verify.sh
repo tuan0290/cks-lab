@@ -78,11 +78,11 @@ fi
 
 echo ""
 
-# --- Tiêu chí 3: Có NetworkPolicy cho phép traffic từ frontend-ns đến backend-ns trên port 8080 ---
+# --- Tiêu chí 3: Có NetworkPolicy cho phép traffic từ frontend-ns đến backend-ns trên port 80 ---
 
-echo "Kiểm tra tiêu chí 3: NetworkPolicy cho phép traffic từ frontend-ns đến backend-ns port 8080"
+echo "Kiểm tra tiêu chí 3: NetworkPolicy cho phép traffic từ frontend-ns đến backend-ns port 80"
 
-# Tìm NetworkPolicy trong backend-ns có namespaceSelector trỏ đến frontend-ns và port 8080
+# Tìm NetworkPolicy trong backend-ns có namespaceSelector trỏ đến frontend-ns và port 80
 FOUND_ALLOW_POLICY=0
 
 # Lấy tất cả NetworkPolicy trong backend-ns
@@ -100,10 +100,10 @@ else
     HAS_INGRESS=$(echo "$NP_JSON" | grep -c '"Ingress"' 2>/dev/null || true)
     # Kiểm tra có namespaceSelector
     HAS_NS_SELECTOR=$(echo "$NP_JSON" | grep -c 'namespaceSelector' 2>/dev/null || true)
-    # Kiểm tra có port 8080
-    HAS_PORT_8080=$(echo "$NP_JSON" | grep -c '"port": 8080\|"port":"8080"' 2>/dev/null || true)
+    # Kiểm tra có port 80
+    HAS_PORT_80=$(echo "$NP_JSON" | grep -c '"port": 80\|"port":"80"' 2>/dev/null || true)
 
-    if [ "$HAS_INGRESS" -gt 0 ] && [ "$HAS_NS_SELECTOR" -gt 0 ] && [ "$HAS_PORT_8080" -gt 0 ]; then
+    if [ "$HAS_INGRESS" -gt 0 ] && [ "$HAS_NS_SELECTOR" -gt 0 ] && [ "$HAS_PORT_80" -gt 0 ]; then
       FOUND_ALLOW_POLICY=1
       ALLOW_POLICY_NAME="$NP_NAME"
       break
@@ -111,10 +111,10 @@ else
   done
 
   if [ "$FOUND_ALLOW_POLICY" -eq 1 ]; then
-    pass "NetworkPolicy '$ALLOW_POLICY_NAME' trong 'backend-ns' cho phép ingress từ namespace selector trên port 8080"
+    pass "NetworkPolicy '$ALLOW_POLICY_NAME' trong 'backend-ns' cho phép ingress từ namespace selector trên port 80"
   else
-    fail "Không tìm thấy NetworkPolicy nào trong 'backend-ns' cho phép ingress từ 'frontend-ns' trên port 8080" \
-         "Tạo NetworkPolicy với namespaceSelector: {kubernetes.io/metadata.name: frontend-ns} và port 8080 (xem README.md Bước 4)"
+    fail "Không tìm thấy NetworkPolicy nào trong 'backend-ns' cho phép ingress từ 'frontend-ns' trên port 80" \
+         "Tạo NetworkPolicy với namespaceSelector: {kubernetes.io/metadata.name: frontend-ns} và port 80 (xem README.md Bước 4)"
   fi
 fi
 
