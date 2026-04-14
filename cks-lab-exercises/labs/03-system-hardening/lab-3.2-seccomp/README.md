@@ -15,6 +15,105 @@
 
 ---
 
+## Lý thuyết
+
+### System Call (Syscall) là gì?
+
+Mọi chương trình khi cần tài nguyên hệ thống (đọc file, tạo process, kết nối mạng...) phải gọi **system call** — giao diện giữa user space và kernel. Ví dụ:
+- `open()` — mở file
+- `execve()` — chạy chương trình mới
+- `connect()` — tạo kết nối mạng
+- `mkdir()` — tạo thư mục
+
+Container chia sẻ kernel với host — nếu container có thể gọi bất kỳ syscall nào, kẻ tấn công có thể khai thác lỗ hổng kernel để escape container.
+
+### Seccomp là gì?
+
+**Seccomp (Secure Computing Mode)** là tính năng Linux kernel cho phép **lọc system call** mà một tiến trình có thể thực hiện. Seccomp profile định nghĩa:
+- Syscall nào được phép (`SCMP_ACT_ALLOW`)
+- Syscall nào bị chặn (`SCMP_ACT_ERRNO` — trả về lỗi)
+- Syscall nào kill process (`SCMP_ACT_KILL`)
+
+### Cấu trúc Seccomp profile (JSON)
+
+```json
+{
+  "defaultAction": "SCMP_ACT_ALLOW",   // Cho phép tất cả mặc định
+  "syscalls": [
+    {
+      "names": ["mkdir", "chmod", "chown"],  // Danh sách syscall cần chặn
+      "action": "SCMP_ACT_ERRNO"             // Trả về lỗi EPERM
+    }
+  ]
+}
+```
+
+**2 chiến lược:**
+
+| Chiến lược | defaultAction | Danh sách | Ưu điểm | Nhược điểm |
+|-----------|--------------|-----------|---------|------------|
+| **Denylist** | `SCMP_ACT_ALLOW` | Syscall bị chặn | Dễ viết | Ít an toàn hơn |
+| **Allowlist** | `SCMP_ACT_ERRNO` | Syscall được phép | An toàn hơn | Khó viết, dễ break app |
+
+### Đường dẫn Seccomp profile trên node
+
+Kubelet tìm kiếm Seccomp profile tại:
+```
+/var/lib/kubelet/seccomp/
+```
+
+Khi khai báo trong pod:
+```yaml
+seccompProfile:
+  type: Localhost
+  localhostProfile: profiles/my-profile.json
+```
+→ Kubelet tìm file tại: `/var/lib/kubelet/seccomp/profiles/my-profile.json`
+
+### Cách áp dụng Seccomp vào pod
+
+```yaml
+spec:
+  securityContext:
+    seccompProfile:
+      type: Localhost                          # Dùng profile tùy chỉnh
+      localhostProfile: profiles/deny-write.json  # Đường dẫn tương đối
+  containers:
+  - name: app
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+```
+
+### 3 loại Seccomp profile
+
+| Type | Mô tả | Khi nào dùng |
+|------|-------|--------------|
+| `Unconfined` | Không giới hạn syscall | Development |
+| `RuntimeDefault` | Profile mặc định của container runtime | Baseline security |
+| `Localhost` | Profile tùy chỉnh trên node | Khi cần kiểm soát chi tiết |
+
+### SecurityContext — Defense in Depth
+
+Seccomp thường kết hợp với các SecurityContext settings khác:
+
+```yaml
+securityContext:
+  seccompProfile:
+    type: RuntimeDefault      # Lọc syscall nguy hiểm
+  runAsNonRoot: true          # Không chạy với UID 0
+  allowPrivilegeEscalation: false  # Ngăn setuid/setgid
+  readOnlyRootFilesystem: true     # Filesystem chỉ đọc
+  capabilities:
+    drop: [ALL]               # Bỏ tất cả Linux capabilities
+```
+
+Mỗi lớp bảo vệ một vector tấn công khác nhau — kết hợp tạo thành **defense in depth**.
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty đang vận hành Kubernetes cluster. Sau khi phân tích rủi ro, bạn xác định rằng các container không nên có khả năng tạo thư mục (`mkdir`), thay đổi quyền file (`chmod`), hoặc thay đổi chủ sở hữu file (`chown`) — đây là các syscall thường bị lạm dụng trong các cuộc tấn công leo thang đặc quyền và persistence.

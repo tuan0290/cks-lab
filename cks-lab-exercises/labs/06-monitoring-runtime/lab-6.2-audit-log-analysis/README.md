@@ -15,6 +15,76 @@
 
 ---
 
+## Lý thuyết
+
+### Kubernetes Audit Log là gì?
+
+**Audit Log** ghi lại tất cả request đến kube-apiserver — ai làm gì, khi nào, với tài nguyên nào, kết quả ra sao. Đây là nguồn thông tin quan trọng nhất để điều tra sự cố bảo mật.
+
+```
+kubectl get secret → kube-apiserver → Audit Log: {user: alice, verb: get, resource: secrets, ...}
+```
+
+### Cấu trúc một Audit Event
+
+```json
+{
+  "kind": "Event",
+  "apiVersion": "audit.k8s.io/v1",
+  "verb": "get",
+  "user": {"username": "alice"},
+  "objectRef": {
+    "resource": "secrets",
+    "namespace": "prod",
+    "name": "db-password"
+  },
+  "responseStatus": {"code": 200},
+  "requestReceivedTimestamp": "2024-10-15T10:30:00Z"
+}
+```
+
+### 4 Audit Levels
+
+| Level | Ghi lại | Dùng khi nào |
+|-------|---------|--------------|
+| `None` | Không ghi | Loại bỏ noise |
+| `Metadata` | User, verb, resource, timestamp | Hầu hết resource |
+| `Request` | Metadata + request body | Khi cần biết nội dung |
+| `RequestResponse` | Metadata + request + response | Secret, ConfigMap nhạy cảm |
+
+### Phân tích audit log với jq
+
+**jq** là công cụ xử lý JSON từ command line — rất hữu ích để phân tích audit log:
+
+```bash
+# Lọc theo resource
+cat audit.log | jq 'select(.objectRef.resource == "secrets")'
+
+# Lọc theo response code
+cat audit.log | jq 'select(.responseStatus.code == 403)'
+
+# Lọc theo subresource (exec vào pod)
+cat audit.log | jq 'select(.objectRef.subresource == "exec")'
+
+# Lấy nhiều field
+cat audit.log | jq -r '[.user.username, .verb, .objectRef.resource] | @tsv'
+
+# Đếm theo user
+cat audit.log | jq -r '.user.username' | sort | uniq -c | sort -rn
+```
+
+### Các pattern tấn công cần tìm trong audit log
+
+| Pattern | jq filter | Ý nghĩa |
+|---------|-----------|---------|
+| Secret access | `select(.objectRef.resource=="secrets")` | Ai đọc secret? |
+| 403 errors | `select(.responseStatus.code==403)` | Ai bị từ chối? |
+| Pod exec | `select(.objectRef.subresource=="exec")` | Ai exec vào pod? |
+| Mass delete | `select(.verb=="delete")` | Ai xóa resource? |
+| Anonymous access | `select(.user.username=="system:anonymous")` | Request không xác thực |
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật đang điều tra một sự cố bảo mật trong cluster Kubernetes. Team của bạn đã thu thập được audit log từ kube-apiserver. Nhiệm vụ của bạn là phân tích log này để trả lời các câu hỏi điều tra.

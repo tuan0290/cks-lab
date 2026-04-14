@@ -15,6 +15,88 @@
 
 ---
 
+## Lý thuyết
+
+### Kubernetes Secret mặc định không được mã hóa
+
+Mặc định, Kubernetes Secret chỉ được **base64-encode** — không phải mã hóa. Base64 là encoding, không phải encryption:
+
+```bash
+echo "supersecret" | base64
+# c3VwZXJzZWNyZXQK
+
+echo "c3VwZXJzZWNyZXQK" | base64 -d
+# supersecret  ← Ai cũng decode được!
+```
+
+Bất kỳ ai có quyền đọc etcd đều có thể xem nội dung Secret. Đây là rủi ro nghiêm trọng nếu etcd bị compromise.
+
+### Encryption at Rest là gì?
+
+**Encryption at Rest** = mã hóa dữ liệu khi lưu trữ (không phải khi truyền tải). Khi bật, Secret được mã hóa trước khi ghi vào etcd:
+
+```
+kubectl create secret → kube-apiserver mã hóa → etcd lưu ciphertext
+kubectl get secret → kube-apiserver giải mã → trả về plaintext
+```
+
+Ngay cả khi kẻ tấn công đọc được etcd, họ chỉ thấy ciphertext không thể đọc được.
+
+### EncryptionConfiguration
+
+Kubernetes dùng file `EncryptionConfiguration` để cấu hình mã hóa:
+
+```yaml
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+- resources:
+  - secrets
+  providers:
+  - aescbc:           # Provider mã hóa
+      keys:
+      - name: key1
+        secret: <base64-encoded-32-byte-key>
+  - identity: {}      # Fallback: đọc Secret chưa mã hóa
+```
+
+**Thứ tự providers quan trọng:**
+- Provider **đầu tiên** được dùng để **mã hóa** khi ghi
+- Tất cả providers được thử khi **đọc** (theo thứ tự)
+- `identity: {}` ở cuối cho phép đọc Secret cũ chưa mã hóa
+
+### Các encryption providers
+
+| Provider | Thuật toán | Khuyến nghị |
+|----------|-----------|-------------|
+| `identity` | Không mã hóa (base64) | ❌ Không dùng production |
+| `aescbc` | AES-CBC 128/192/256-bit | ✅ Tốt |
+| `aesgcm` | AES-GCM | ✅ Tốt hơn aescbc |
+| `secretbox` | XSalsa20+Poly1305 | ✅ Tốt |
+| `kms` | Tích hợp KMS (AWS/GCP) | ✅ Tốt nhất cho production |
+
+### Tạo key cho aescbc
+
+```bash
+# Tạo key ngẫu nhiên 32 bytes (AES-256)
+head -c 32 /dev/urandom | base64
+```
+
+### Xác minh mã hóa trong etcd
+
+```bash
+ETCDCTL_API=3 etcdctl \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key \
+  get /registry/secrets/<namespace>/<secret-name> | hexdump -C | head
+
+# Secret ĐÃ mã hóa: bắt đầu bằng "k8s:enc:aescbc:v1:"
+# Secret CHƯA mã hóa: bắt đầu bằng "k8s\x00\n" và có thể đọc được
+```
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty fintech. Sau khi audit, bạn phát hiện rằng các Kubernetes Secret đang được lưu trữ dưới dạng **base64 plaintext** trong etcd — bất kỳ ai có quyền truy cập etcd đều có thể đọc được nội dung Secret.

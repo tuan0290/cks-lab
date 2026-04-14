@@ -15,6 +15,85 @@
 
 ---
 
+## Lý thuyết
+
+### KubeLinter là gì?
+
+**KubeLinter** là công cụ static analysis của StackRox (Red Hat) chuyên cho Kubernetes manifests. Khác với kubesec (trả về điểm số), KubeLinter trả về **danh sách lỗi cụ thể kèm hướng dẫn sửa**:
+
+```bash
+kube-linter lint deployment.yaml
+```
+
+Output:
+```
+deployment.yaml: (object: default/my-app apps/v1, Kind=Deployment)
+  container "app" does not have a read-only root file system
+  (check: read-only-root-filesystem, remediation: Set readOnlyRootFilesystem to true...)
+
+Error: found 3 lint errors
+```
+
+### Các checks quan trọng của KubeLinter
+
+| Check | Vấn đề phát hiện | Fix |
+|-------|-----------------|-----|
+| `run-as-non-root` | Container chạy với UID 0 | `runAsNonRoot: true` |
+| `read-only-root-filesystem` | Filesystem root có thể ghi | `readOnlyRootFilesystem: true` |
+| `privileged-container` | Container chạy privileged | `privileged: false` |
+| `unset-cpu-requirements` | Không có CPU limits | Thêm `resources.limits.cpu` |
+| `unset-memory-requirements` | Không có memory limits | Thêm `resources.limits.memory` |
+| `latest-tag` | Image dùng tag `latest` | Dùng tag cụ thể |
+| `no-read-only-root-fs` | Alias của check trên | Như trên |
+
+### So sánh KubeLinter vs kubesec vs trivy config
+
+| | KubeLinter | kubesec | trivy config |
+|---|---|---|---|
+| Output | Danh sách lỗi + remediation | JSON score | Severity levels |
+| Checks | 30+ K8s-specific | ~20 Pod security | Hàng trăm (K8s+Terraform+Docker) |
+| Tùy chỉnh | `.kube-linter.yaml` | Hạn chế | `.trivyignore` |
+| Khi nào dùng | Lint K8s manifest | Cần điểm số | Scan toàn bộ IaC |
+
+### Cấu hình .kube-linter.yaml
+
+```yaml
+checks:
+  addAllBuiltIn: true    # Dùng tất cả checks mặc định
+  exclude:
+    - "latest-tag"       # Bỏ qua check này (dev environment)
+```
+
+### Tích hợp CI/CD
+
+```yaml
+# GitHub Actions
+- name: Lint Kubernetes manifests
+  run: |
+    kube-linter lint ./k8s/  # Exit code 1 nếu có lỗi → fail pipeline
+```
+
+### SecurityContext đầy đủ (để pass KubeLinter)
+
+```yaml
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+resources:
+  limits:
+    cpu: "500m"
+    memory: "128Mi"
+  requests:
+    cpu: "100m"
+    memory: "64Mi"
+```
+
+---
+
 ## Bối cảnh
 
 Bạn là DevSecOps engineer đang tích hợp static analysis vào CI/CD pipeline. Trước khi apply manifest lên cluster, bạn cần lint manifest để phát hiện sớm các vấn đề bảo mật.

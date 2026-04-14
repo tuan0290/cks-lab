@@ -15,6 +15,74 @@
 
 ---
 
+## Lý thuyết
+
+### ServiceAccount Token là gì?
+
+Mỗi pod trong Kubernetes mặc định được gắn một **ServiceAccount** và token của nó được **tự động mount** vào pod tại:
+```
+/var/run/secrets/kubernetes.io/serviceaccount/token
+```
+
+Token này là **JWT (JSON Web Token)** cho phép pod xác thực với kube-apiserver. Pod có thể dùng token này để gọi Kubernetes API.
+
+### Tại sao automount là rủi ro bảo mật?
+
+Hầu hết ứng dụng (web server, database, worker...) **không cần** gọi Kubernetes API. Nhưng token vẫn được mount mặc định. Nếu pod bị compromise:
+
+```
+Attacker → RCE vào pod → Đọc token → Gọi K8s API → Enumerate cluster → Lateral movement
+```
+
+Ngay cả ServiceAccount với quyền tối thiểu cũng có thể dùng để:
+- `kubectl get pods --all-namespaces` (nếu có quyền list pods)
+- Enumerate secrets, configmaps
+- Thu thập thông tin về cluster topology
+
+### Cách tắt automount
+
+**Tắt ở ServiceAccount level** (ảnh hưởng tất cả pod dùng SA này):
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: my-sa
+automountServiceAccountToken: false  # Tắt cho tất cả pod
+```
+
+**Tắt ở Pod level** (ghi đè SA setting):
+```yaml
+spec:
+  automountServiceAccountToken: false  # Ghi đè SA setting
+  serviceAccountName: my-sa
+```
+
+**Thứ tự ưu tiên:** Pod spec > ServiceAccount spec
+
+### Khi nào NÊN và KHÔNG NÊN tắt?
+
+| Loại ứng dụng | Tắt automount? | Lý do |
+|--------------|---------------|-------|
+| Web server, API gateway | ✅ Nên tắt | Không cần K8s API |
+| Worker, batch job | ✅ Nên tắt | Thường không cần K8s API |
+| Operator, controller | ❌ Không tắt | Cần watch/update resources |
+| Service mesh sidecar | ❌ Không tắt | Cần API để lấy config |
+
+### Xác minh token không được mount
+
+```bash
+# Kiểm tra thư mục secrets trong pod
+kubectl exec my-pod -- ls /var/run/secrets/kubernetes.io/serviceaccount/ 2>&1
+# Nếu tắt: "No such file or directory"
+# Nếu bật: "ca.crt  namespace  token"
+
+# Kiểm tra qua pod spec
+kubectl get pod my-pod -o jsonpath='{.spec.automountServiceAccountToken}'
+# Mong đợi: false
+```
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty SaaS. Trong quá trình audit, bạn phát hiện nhiều pod đang tự động mount ServiceAccount token dù không cần giao tiếp với Kubernetes API. Điều này vi phạm nguyên tắc least-privilege — nếu một pod bị compromise, kẻ tấn công có thể dùng token để truy cập API server.

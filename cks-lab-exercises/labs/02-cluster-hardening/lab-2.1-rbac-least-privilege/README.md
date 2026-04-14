@@ -16,6 +16,93 @@
 
 ---
 
+## Lý thuyết
+
+### RBAC là gì?
+
+**RBAC (Role-Based Access Control)** là cơ chế phân quyền trong Kubernetes — kiểm soát **ai** được làm **gì** với **tài nguyên** nào. Thay vì cấp quyền trực tiếp cho từng user, RBAC dùng **Role** làm trung gian.
+
+Mô hình RBAC gồm 3 thành phần:
+```
+Subject (Ai?)  →  RoleBinding  →  Role (Làm gì?)  →  Resource (Với gì?)
+```
+
+- **Subject**: User, Group, hoặc ServiceAccount
+- **Role/ClusterRole**: Tập hợp các quyền (verbs trên resources)
+- **RoleBinding/ClusterRoleBinding**: Gắn Role với Subject
+
+### Role vs ClusterRole
+
+| | Role | ClusterRole |
+|---|---|---|
+| Phạm vi | Một namespace | Toàn cluster |
+| Dùng cho | Tài nguyên trong namespace (pods, secrets...) | Tài nguyên cluster-wide (nodes, PV...) |
+| Binding | RoleBinding | ClusterRoleBinding (hoặc RoleBinding) |
+
+> **Tip:** Dùng `Role + RoleBinding` khi ứng dụng chỉ cần quyền trong namespace của nó. Chỉ dùng `ClusterRole` khi thực sự cần quyền cluster-wide.
+
+### Verbs và Resources
+
+```yaml
+rules:
+- apiGroups: [""]          # "" = core API group (pods, services, secrets...)
+  resources: ["pods"]      # Loại tài nguyên
+  verbs: ["get", "list"]   # Hành động được phép
+```
+
+Các verbs phổ biến:
+
+| Verb | Ý nghĩa | HTTP method tương đương |
+|------|---------|------------------------|
+| `get` | Đọc một resource | GET |
+| `list` | Liệt kê nhiều resource | GET (collection) |
+| `watch` | Theo dõi thay đổi realtime | GET (watch) |
+| `create` | Tạo mới | POST |
+| `update` | Cập nhật toàn bộ | PUT |
+| `patch` | Cập nhật một phần | PATCH |
+| `delete` | Xóa | DELETE |
+| `*` | Tất cả verbs | ⚠️ Tránh dùng trong production |
+
+### Nguyên tắc Least Privilege
+
+**Least Privilege** = chỉ cấp đúng những quyền cần thiết, không hơn.
+
+❌ **Sai:** Cấp `cluster-admin` cho ServiceAccount của ứng dụng web
+✅ **Đúng:** Chỉ cấp `get, list` trên `pods` trong namespace của ứng dụng
+
+Tại sao quan trọng? Nếu ứng dụng bị compromise (RCE vulnerability), kẻ tấn công chỉ có thể làm những gì ServiceAccount được phép — không thể leo thang lên toàn cluster.
+
+### Kiểm tra quyền với kubectl auth can-i
+
+```bash
+# Kiểm tra quyền của user hiện tại
+kubectl auth can-i list pods -n default
+
+# Kiểm tra quyền của ServiceAccount (impersonate)
+kubectl auth can-i list pods \
+  --as=system:serviceaccount:my-ns:my-sa \
+  -n my-ns
+
+# Liệt kê tất cả quyền của một identity
+kubectl auth can-i --list \
+  --as=system:serviceaccount:my-ns:my-sa \
+  -n my-ns
+```
+
+### Tìm ClusterRoleBinding nguy hiểm
+
+```bash
+# Tìm tất cả binding gán cluster-admin
+kubectl get clusterrolebinding -o json | \
+  jq '.items[] | select(.roleRef.name=="cluster-admin") | .metadata.name'
+
+# Tìm binding có wildcard verb *
+kubectl get clusterrole -o json | \
+  jq '.items[] | select(.rules[]?.verbs[]? == "*") | .metadata.name'
+```
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty. Trong quá trình audit cluster, bạn phát hiện ServiceAccount `app-sa` trong namespace `rbac-lab` đang được gán ClusterRole `cluster-admin` thông qua ClusterRoleBinding `app-sa-binding`. Đây là vi phạm nghiêm trọng nguyên tắc least-privilege — ứng dụng chỉ cần đọc danh sách pod trong namespace của nó, nhưng lại có toàn quyền trên toàn cluster.

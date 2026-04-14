@@ -14,6 +14,80 @@
 
 ---
 
+## Lý thuyết
+
+### Tại sao cần kiểm soát image registry?
+
+Nếu không kiểm soát, developer có thể deploy image từ bất kỳ registry nào — kể cả registry không tin cậy, có thể chứa malware. **Image Policy** đảm bảo chỉ image từ registry được phê duyệt mới được deploy.
+
+### OPA/Gatekeeper là gì?
+
+**OPA (Open Policy Agent)** là policy engine mã nguồn mở. **Gatekeeper** là Kubernetes admission controller tích hợp OPA, cho phép viết policy bằng ngôn ngữ **Rego**.
+
+Gatekeeper hoạt động như **ValidatingAdmissionWebhook** — được gọi bởi API server trước khi tạo/cập nhật resource:
+
+```
+kubectl apply → API Server → Gatekeeper Webhook → OPA Policy → Allow/Deny
+```
+
+### ConstraintTemplate và Constraint
+
+Gatekeeper dùng 2 loại resource:
+
+**ConstraintTemplate**: Định nghĩa loại policy (schema + Rego logic)
+```yaml
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sallowedrepos
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sAllowedRepos
+  targets:
+  - target: admission.k8s.gatekeeper.sh
+    rego: |
+      package k8sallowedrepos
+      violation[{"msg": msg}] {
+        container := input.review.object.spec.containers[_]
+        satisfied := [good | repo = input.parameters.repos[_]; good = startswith(container.image, repo)]
+        not any(satisfied)
+        msg := sprintf("Image not from allowed repo: %v", [container.image])
+      }
+```
+
+**Constraint**: Instance của ConstraintTemplate với tham số cụ thể
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata:
+  name: allowed-repos
+spec:
+  match:
+    kinds:
+    - apiGroups: [""]
+      kinds: ["Pod"]
+    namespaces:
+    - production
+  parameters:
+    repos:
+    - "registry.k8s.io"
+    - "docker.io/library"
+```
+
+### Kiểm tra Gatekeeper violations
+
+```bash
+# Xem tất cả violations
+kubectl get constraint -o json | jq '.items[].status.violations'
+
+# Xem violations của một constraint cụ thể
+kubectl describe k8sallowedrepos allowed-repos
+```
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty đang triển khai chính sách kiểm soát image registry. Yêu cầu bảo mật là chỉ cho phép deploy image từ các registry đã được phê duyệt: `registry.k8s.io` và `docker.io/library`. Bất kỳ image nào từ registry khác phải bị từ chối bởi admission controller.

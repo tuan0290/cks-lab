@@ -14,6 +14,67 @@
 
 ---
 
+## Lý thuyết
+
+### Supply Chain Security là gì?
+
+**Supply Chain Security** là bảo vệ toàn bộ chuỗi cung ứng phần mềm — từ code → build → image → registry → deploy. Một cuộc tấn công supply chain có thể xảy ra ở bất kỳ bước nào:
+
+```
+Developer → Git → CI/CD → Registry → Kubernetes
+    ↑           ↑       ↑          ↑
+  Code injection  Build tampering  Image substitution  Manifest tampering
+```
+
+### Tại sao cần ký image?
+
+Khi bạn pull image `nginx:1.25-alpine`, làm sao biết đây là image thật từ Docker Hub, không phải image giả mạo? **Image signing** giải quyết vấn đề này:
+
+1. **Người publish** ký image bằng private key → tạo chữ ký số
+2. **Người deploy** xác minh chữ ký bằng public key → đảm bảo image không bị giả mạo
+
+### cosign là gì?
+
+**cosign** là công cụ của dự án [Sigstore](https://www.sigstore.dev/) (Linux Foundation) để ký và xác minh container image. cosign lưu chữ ký dưới dạng OCI artifact trong cùng registry với image.
+
+### Vòng đời ký image với cosign
+
+```
+1. Tạo key pair          2. Ký image              3. Xác minh
+cosign generate-key-pair → cosign sign --key ... → cosign verify --key ...
+(cosign.key + cosign.pub)   (chữ ký lưu vào registry)  (kiểm tra chữ ký)
+```
+
+### Các lệnh cosign cơ bản
+
+```bash
+# Tạo key pair
+cosign generate-key-pair
+# Output: cosign.key (private), cosign.pub (public)
+
+# Ký image
+COSIGN_PASSWORD="" cosign sign --key cosign.key nginx:1.25-alpine
+
+# Xác minh chữ ký
+cosign verify --key cosign.pub nginx:1.25-alpine
+
+# Xem thông tin chữ ký
+cosign triangulate nginx:1.25-alpine  # Xem nơi lưu chữ ký
+```
+
+### Keyless signing (nâng cao)
+
+cosign cũng hỗ trợ **keyless signing** — không cần quản lý private key, dùng OIDC identity (GitHub Actions, Google Cloud...) thay thế. Phù hợp cho CI/CD pipeline.
+
+### Tích hợp với Kubernetes
+
+Để enforce image signing trong Kubernetes, dùng:
+- **Sigstore Policy Controller**: Admission webhook kiểm tra chữ ký
+- **Kyverno**: Policy engine hỗ trợ cosign verification
+- **OPA/Gatekeeper**: Kiểm tra image signature qua policy
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty đang triển khai quy trình bảo mật chuỗi cung ứng phần mềm. Yêu cầu mới từ team security là tất cả container image phải được ký số trước khi deploy lên production để đảm bảo tính toàn vẹn và nguồn gốc của image.

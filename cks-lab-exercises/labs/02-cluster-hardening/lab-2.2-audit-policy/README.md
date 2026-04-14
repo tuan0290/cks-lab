@@ -16,6 +16,90 @@
 
 ---
 
+## Lý thuyết
+
+### Kubernetes Audit Logging là gì?
+
+**Audit Logging** ghi lại tất cả các request đến kube-apiserver — ai làm gì, khi nào, với tài nguyên nào, và kết quả ra sao. Đây là công cụ thiết yếu cho:
+- **Security investigation**: Ai đã đọc Secret X lúc 3 giờ sáng?
+- **Compliance**: PCI-DSS, SOC2 yêu cầu audit trail
+- **Incident response**: Tái hiện chuỗi sự kiện sau tấn công
+
+### Cấu trúc một Audit Event
+
+```json
+{
+  "verb": "get",
+  "user": {"username": "alice"},
+  "objectRef": {"resource": "secrets", "name": "db-password", "namespace": "prod"},
+  "responseStatus": {"code": 200},
+  "requestReceivedTimestamp": "2024-10-15T10:30:00Z"
+}
+```
+
+### 4 Audit Levels
+
+| Level | Ghi lại gì | Dùng khi nào |
+|-------|-----------|--------------|
+| `None` | Không ghi gì | Loại bỏ noise từ system components |
+| `Metadata` | Chỉ metadata (user, verb, resource, timestamp) | Hầu hết các resource |
+| `Request` | Metadata + request body | Khi cần biết nội dung request |
+| `RequestResponse` | Metadata + request + response body | Secret, ConfigMap nhạy cảm |
+
+> **Lưu ý:** `RequestResponse` cho Secret sẽ ghi lại **giá trị thực của Secret** (base64) vào log — cần bảo vệ file log cẩn thận!
+
+### Audit Policy — Rules và thứ tự ưu tiên
+
+Audit Policy là file YAML định nghĩa rules. **Rule đầu tiên khớp sẽ được áp dụng** — thứ tự rất quan trọng:
+
+```yaml
+apiVersion: audit.k8s.io/v1
+kind: Policy
+rules:
+# Rule 1: Ghi đầy đủ cho Secret (cụ thể nhất → đặt trước)
+- level: RequestResponse
+  resources:
+  - group: ""
+    resources: ["secrets"]
+
+# Rule 2: Bỏ qua noise từ system components
+- level: None
+  users: ["system:kube-proxy"]
+
+# Rule 3: Ghi metadata cho tất cả còn lại (tổng quát nhất → đặt cuối)
+- level: Metadata
+  omitStages: ["RequestReceived"]
+```
+
+### Cấu hình kube-apiserver để bật Audit Logging
+
+Thêm vào `/etc/kubernetes/manifests/kube-apiserver.yaml`:
+
+```yaml
+- --audit-policy-file=/etc/kubernetes/audit/audit-policy.yaml
+- --audit-log-path=/var/log/kubernetes/audit/audit.log
+- --audit-log-maxage=30
+- --audit-log-maxbackup=10
+- --audit-log-maxsize=100
+```
+
+Và mount volume để kube-apiserver đọc được policy file và ghi log.
+
+### Phân tích audit log với jq
+
+```bash
+# Tìm ai đã đọc Secret
+cat audit.log | jq 'select(.objectRef.resource=="secrets") | {user: .user.username, verb: .verb, secret: .objectRef.name}'
+
+# Tìm request bị từ chối (403)
+cat audit.log | jq 'select(.responseStatus.code==403) | {user: .user.username, verb: .verb}'
+
+# Tìm kubectl exec vào pod
+cat audit.log | jq 'select(.objectRef.subresource=="exec") | {user: .user.username, pod: .objectRef.name}'
+```
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty fintech. Sau một sự cố bảo mật, ban lãnh đạo yêu cầu bật audit logging trên Kubernetes cluster để theo dõi mọi thao tác liên quan đến Secret (credentials, API keys, certificates). Đặc biệt, cần ghi lại đầy đủ nội dung request và response khi có ai đó đọc hoặc sửa Secret, trong khi các thao tác khác chỉ cần ghi metadata để tiết kiệm dung lượng.

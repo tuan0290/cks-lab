@@ -14,6 +14,83 @@
 
 ---
 
+## Lý thuyết
+
+### Static Analysis là gì?
+
+**Static Analysis** (phân tích tĩnh) là kiểm tra code/config mà không cần chạy chương trình. Trong Kubernetes security, static analysis kiểm tra manifest YAML để phát hiện vấn đề bảo mật **trước khi deploy**.
+
+Lợi ích: Phát hiện sớm → chi phí sửa thấp hơn nhiều so với phát hiện sau khi deploy.
+
+### kubesec là gì?
+
+**kubesec** là công cụ static analysis cho Kubernetes manifest, trả về **điểm số bảo mật** (-30 đến +7):
+
+```bash
+kubesec scan pod.yaml
+```
+
+Output:
+```json
+{
+  "score": -30,
+  "scoring": {
+    "critical": [
+      {
+        "id": "Privileged",
+        "selector": "containers[] .securityContext .privileged == true",
+        "reason": "Privileged containers can allow almost completely unrestricted host access",
+        "points": -30
+      }
+    ],
+    "advise": [...]
+  }
+}
+```
+
+| Score | Ý nghĩa |
+|-------|---------|
+| < 0 | Critical security issues — cần sửa ngay |
+| 0 | Baseline (không có điểm cộng hay trừ) |
+| > 0 | Security best practices được áp dụng |
+
+### trivy config là gì?
+
+**trivy config** quét Kubernetes manifest, Dockerfile, Terraform... tìm misconfiguration:
+
+```bash
+trivy config pod.yaml
+trivy config --severity HIGH,CRITICAL pod.yaml
+```
+
+### Các vấn đề bảo mật phổ biến trong manifest
+
+| Vấn đề | Rủi ro | Fix |
+|--------|--------|-----|
+| `privileged: true` | Container có toàn quyền host | `privileged: false` |
+| `hostPID: true` | Thấy tất cả process trên host | Xóa hoặc `false` |
+| `hostNetwork: true` | Dùng network namespace của host | Xóa hoặc `false` |
+| Không có `resources.limits` | Có thể chiếm toàn bộ tài nguyên node | Thêm limits |
+| Image tag `latest` | Không xác định version | Dùng tag cụ thể |
+| Không có `runAsNonRoot` | Container chạy với root | `runAsNonRoot: true` |
+
+### Dockerfile best practices
+
+```dockerfile
+# Dùng multi-stage build để giảm kích thước image
+FROM golang:1.21-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN go build -o myapp .
+
+FROM gcr.io/distroless/static:nonroot  # Minimal base image
+COPY --from=builder /app/myapp /myapp
+USER nonroot:nonroot  # Chạy với user non-root
+ENTRYPOINT ["/myapp"]
+```
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật đang review một Kubernetes manifest trước khi deploy lên production. Manifest này được viết bởi một developer mới và có nhiều vấn đề bảo mật nghiêm trọng: container chạy ở chế độ privileged và sử dụng hostPID namespace của host.

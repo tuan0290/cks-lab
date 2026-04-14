@@ -15,6 +15,85 @@
 
 ---
 
+## Lý thuyết
+
+### Linux Security Modules (LSM) là gì?
+
+**Linux Security Modules (LSM)** là framework trong Linux kernel cho phép các module bảo mật kiểm soát quyền truy cập của tiến trình vào tài nguyên hệ thống. Hai LSM phổ biến nhất:
+
+| LSM | Hệ điều hành | Cơ chế |
+|-----|-------------|--------|
+| **AppArmor** | Ubuntu, Debian | Profile dựa trên đường dẫn file |
+| **SELinux** | RHEL, CentOS | Label-based, phức tạp hơn |
+
+Trong CKS, AppArmor được tập trung vì Ubuntu là OS phổ biến nhất cho Kubernetes node.
+
+### AppArmor là gì?
+
+**AppArmor (Application Armor)** là LSM cho phép giới hạn quyền của tiến trình theo **profile**. Mỗi profile định nghĩa:
+- File nào tiến trình được đọc/ghi/thực thi
+- Network connection nào được phép
+- Linux capabilities nào được phép
+
+Ví dụ profile đơn giản:
+```
+profile k8s-deny-write flags=(attach_disconnected) {
+  #include <abstractions/base>
+  file,           # Cho phép đọc tất cả file
+  deny /** w,     # Chặn ghi vào mọi đường dẫn
+  deny /** a,     # Chặn append vào mọi đường dẫn
+}
+```
+
+### 2 chế độ AppArmor
+
+| Chế độ | Hành vi | Dùng khi nào |
+|--------|---------|--------------|
+| **enforce** | Chặn hành vi vi phạm profile | Production |
+| **complain** | Chỉ log vi phạm, không chặn | Testing/debugging |
+
+### Vòng đời của AppArmor profile
+
+```
+1. Tạo profile file  →  2. Load vào kernel  →  3. Gắn vào container
+   (text file)           (apparmor_parser)       (annotation trong pod)
+```
+
+**Bước 2 — Load profile:**
+```bash
+# Load hoặc reload profile
+sudo apparmor_parser -r -W /path/to/profile
+
+# Kiểm tra profile đã load
+sudo aa-status | grep <profile-name>
+```
+
+**Bước 3 — Gắn vào container qua annotation:**
+```yaml
+metadata:
+  annotations:
+    # Format: container.apparmor.security.beta.kubernetes.io/<container-name>: <value>
+    container.apparmor.security.beta.kubernetes.io/mycontainer: localhost/k8s-deny-write
+    #                                                             ↑ tiền tố bắt buộc
+    #                                                                      ↑ tên profile
+```
+
+### Các giá trị annotation AppArmor
+
+| Giá trị | Ý nghĩa |
+|---------|---------|
+| `runtime/default` | Dùng profile mặc định của container runtime |
+| `localhost/<profile-name>` | Dùng profile đã load trên node |
+| `unconfined` | Không áp dụng AppArmor (không khuyến nghị) |
+
+### Lưu ý quan trọng
+
+- Profile phải được load trên **đúng node** mà pod sẽ chạy
+- Trong cluster multi-node, cần load profile trên tất cả node (hoặc dùng DaemonSet)
+- Kubernetes 1.30+ hỗ trợ field `securityContext.appArmorProfile` thay cho annotation
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty đang vận hành Kubernetes cluster trên Linux. Sau khi audit, bạn phát hiện một số container có thể ghi file tùy ý vào filesystem — đây là rủi ro bảo mật nghiêm trọng nếu container bị compromise.

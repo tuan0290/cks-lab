@@ -14,6 +14,80 @@
 
 ---
 
+## Lý thuyết
+
+### NetworkPolicy là gì?
+
+Trong Kubernetes, mặc định **tất cả các pod đều có thể giao tiếp với nhau** — không có tường lửa nào ngăn cách. Điều này tiện lợi khi phát triển nhưng rất nguy hiểm trong môi trường production: nếu một pod bị tấn công, kẻ tấn công có thể dễ dàng di chuyển sang các pod khác trong cluster.
+
+**NetworkPolicy** là tài nguyên Kubernetes cho phép bạn định nghĩa **quy tắc tường lửa ở tầng mạng** cho các pod. Nó hoạt động như một "firewall rule" — chỉ cho phép traffic được khai báo rõ ràng, chặn tất cả còn lại.
+
+> **Lưu ý quan trọng:** NetworkPolicy chỉ hoạt động khi CNI plugin hỗ trợ (Calico, Cilium, Weave...). Nếu dùng CNI không hỗ trợ (như Flannel mặc định), NetworkPolicy sẽ được tạo nhưng không có tác dụng.
+
+### Ingress và Egress là gì?
+
+```
+Internet → [Ingress] → Pod → [Egress] → Internet/Pod khác
+```
+
+- **Ingress**: Traffic đi **vào** pod (ai được phép gọi đến pod này?)
+- **Egress**: Traffic đi **ra** từ pod (pod này được phép gọi đến đâu?)
+
+Mỗi NetworkPolicy có thể kiểm soát một hoặc cả hai hướng thông qua `policyTypes`.
+
+### Default Deny là gì và tại sao cần?
+
+**Default Deny** là pattern bảo mật: chặn tất cả traffic trước, sau đó chỉ mở những gì thực sự cần thiết. Đây là nguyên tắc **least privilege** áp dụng cho tầng mạng.
+
+Cách tạo default deny:
+```yaml
+spec:
+  podSelector: {}   # {} = áp dụng cho TẤT CẢ pod trong namespace
+  policyTypes:
+  - Ingress         # Khai báo kiểm soát ingress
+                    # Không có rules = chặn tất cả ingress
+```
+
+Khi `policyTypes` có `Ingress` nhưng không có `ingress:` rules → **chặn toàn bộ ingress**.
+Khi `policyTypes` có `Egress` nhưng không có `egress:` rules → **chặn toàn bộ egress**.
+
+### namespaceSelector và podSelector
+
+NetworkPolicy có thể chọn nguồn/đích traffic theo:
+
+| Selector | Ý nghĩa | Ví dụ |
+|----------|---------|-------|
+| `namespaceSelector` | Chọn theo namespace | Cho phép từ namespace `frontend` |
+| `podSelector` | Chọn theo label của pod | Cho phép từ pod có label `app: web` |
+| Kết hợp cả hai | AND logic | Pod có label X **và** ở namespace Y |
+
+**AND vs OR — điểm dễ nhầm nhất:**
+```yaml
+# AND: pod phải ở frontend-ns VÀ có label app=web
+from:
+- namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: frontend-ns
+  podSelector:          # cùng phần tử → AND
+    matchLabels:
+      app: web
+
+# OR: pod ở frontend-ns HOẶC có label app=web
+from:
+- namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: frontend-ns
+- podSelector:          # phần tử riêng → OR
+    matchLabels:
+      app: web
+```
+
+### NetworkPolicy là stateless
+
+NetworkPolicy **không** tự động cho phép traffic chiều ngược lại. Nếu bạn chặn egress của frontend, frontend không thể gọi đến backend — dù backend có mở ingress hay không. Cần mở **cả 2 chiều** để kết nối thông.
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty fintech. Hệ thống microservice đang chạy trong Kubernetes cluster với nhiều namespace. Theo yêu cầu bảo mật, mọi traffic giữa các namespace phải bị chặn theo mặc định (default deny), và chỉ các kết nối được phê duyệt rõ ràng mới được phép.

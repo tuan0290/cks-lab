@@ -15,6 +15,81 @@
 
 ---
 
+## Lý thuyết
+
+### Pod Security Standards (PSS) là gì?
+
+Trước Kubernetes 1.25, việc kiểm soát bảo mật pod được thực hiện qua **PodSecurityPolicy (PSP)** — một cơ chế phức tạp và khó cấu hình. Từ K8s 1.25, PSP bị xóa hoàn toàn và thay thế bằng **Pod Security Standards (PSS)** — đơn giản hơn, built-in, không cần cài thêm gì.
+
+PSS định nghĩa **3 mức bảo mật** cho pod:
+
+| Mức | Tên | Mô tả | Dùng khi nào |
+|-----|-----|-------|--------------|
+| 1 | `privileged` | Không hạn chế gì | CNI plugins, storage drivers, workload hệ thống |
+| 2 | `baseline` | Ngăn các leo thang đặc quyền rõ ràng | Workload thông thường |
+| 3 | `restricted` | Tuân thủ đầy đủ best practices | Workload production nhạy cảm |
+
+### 3 chế độ hoạt động
+
+PSS có 3 chế độ, áp dụng độc lập cho từng namespace qua **label**:
+
+| Chế độ | Label key | Hành vi |
+|--------|-----------|---------|
+| `enforce` | `pod-security.kubernetes.io/enforce` | **Từ chối** pod vi phạm — pod không được tạo |
+| `audit` | `pod-security.kubernetes.io/audit` | Ghi log vi phạm vào audit log, **vẫn cho phép** pod chạy |
+| `warn` | `pod-security.kubernetes.io/warn` | Hiển thị **cảnh báo** cho người dùng, vẫn cho phép |
+
+Có thể kết hợp cả 3 chế độ với mức khác nhau:
+```bash
+kubectl label namespace my-ns \
+  pod-security.kubernetes.io/enforce=baseline \
+  pod-security.kubernetes.io/audit=restricted \
+  pod-security.kubernetes.io/warn=restricted
+```
+→ Enforce baseline (chặn vi phạm baseline), nhưng audit+warn ở restricted để chuẩn bị nâng cấp.
+
+### Mức `restricted` yêu cầu gì?
+
+Pod muốn chạy trong namespace `restricted` phải có đầy đủ:
+
+```yaml
+securityContext:
+  runAsNonRoot: true              # Không chạy với UID 0 (root)
+  seccompProfile:
+    type: RuntimeDefault          # Phải có seccomp profile
+containers:
+- securityContext:
+    allowPrivilegeEscalation: false  # Không cho phép leo thang đặc quyền
+    capabilities:
+      drop: [ALL]                 # Drop tất cả Linux capabilities
+```
+
+Nếu thiếu bất kỳ trường nào → pod bị từ chối với thông báo lỗi chi tiết.
+
+### Cách gắn label PSS lên namespace
+
+```bash
+# Gắn enforce=restricted
+kubectl label namespace <tên-ns> \
+  pod-security.kubernetes.io/enforce=restricted \
+  pod-security.kubernetes.io/enforce-version=latest
+
+# Kiểm tra label đã gắn
+kubectl get namespace <tên-ns> --show-labels
+
+# Xóa label (nếu cần)
+kubectl label namespace <tên-ns> pod-security.kubernetes.io/enforce-
+```
+
+### Tại sao PSS quan trọng trong CKS?
+
+PSS là cơ chế **built-in** của Kubernetes để ngăn pod chạy với quyền nguy hiểm. Trong kỳ thi CKS, bạn thường được yêu cầu:
+- Gắn label PSS lên namespace
+- Xác minh pod vi phạm bị từ chối
+- Hiểu sự khác biệt giữa 3 mức và 3 chế độ
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty thương mại điện tử. Sau một cuộc kiểm tra bảo mật, nhóm bảo mật yêu cầu tất cả workload production phải tuân thủ tiêu chuẩn bảo mật pod ở mức `restricted` — mức cao nhất trong Pod Security Standards của Kubernetes.

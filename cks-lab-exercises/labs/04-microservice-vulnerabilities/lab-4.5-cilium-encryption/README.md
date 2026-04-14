@@ -14,6 +14,87 @@
 
 ---
 
+## Lý thuyết
+
+### Tại sao cần Pod-to-Pod Encryption?
+
+Mặc định, traffic giữa các pod trong Kubernetes cluster đi qua mạng nội bộ **không được mã hóa**. Điều này có nghĩa là:
+- Attacker có quyền truy cập network infrastructure có thể sniff traffic
+- Trong môi trường multi-tenant, tenant này có thể đọc traffic của tenant khác
+- Compliance requirements (PCI-DSS, HIPAA) thường yêu cầu mã hóa data in transit
+
+### Cilium là gì?
+
+**Cilium** là CNI plugin cho Kubernetes sử dụng **eBPF (extended Berkeley Packet Filter)** — công nghệ kernel-level cho phép lập trình network behavior mà không cần kernel module. Cilium cung cấp:
+- NetworkPolicy nâng cao (L7 filtering)
+- Pod-to-Pod encryption (WireGuard hoặc IPSec)
+- Observability (Hubble)
+
+### WireGuard vs IPSec
+
+Cilium hỗ trợ 2 phương thức encryption:
+
+| | WireGuard | IPSec |
+|---|---|---|
+| Kernel requirement | >= 5.6 | >= 4.x |
+| Performance | Cao hơn | Thấp hơn |
+| Key management | Tự động | Cần quản lý thủ công |
+| Audit | Đơn giản hơn | Phức tạp hơn |
+
+### Bật WireGuard encryption trên Cilium
+
+```bash
+# Dùng Helm
+helm upgrade cilium cilium/cilium \
+  --namespace kube-system \
+  --reuse-values \
+  --set encryption.enabled=true \
+  --set encryption.type=wireguard
+
+# Hoặc patch ConfigMap
+kubectl patch configmap cilium-config -n kube-system \
+  --type merge \
+  -p '{"data":{"enable-wireguard":"true"}}'
+
+kubectl rollout restart daemonset/cilium -n kube-system
+```
+
+### CiliumNetworkPolicy
+
+Cilium có CRD riêng `CiliumNetworkPolicy` mạnh hơn NetworkPolicy tiêu chuẩn:
+
+```yaml
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-client-to-server
+  namespace: cilium-lab
+spec:
+  endpointSelector:      # Tương đương podSelector
+    matchLabels:
+      app: server
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        app: client
+    toPorts:
+    - ports:
+      - port: "80"
+        protocol: TCP
+```
+
+### Kiểm tra encryption status
+
+```bash
+# Dùng cilium CLI
+cilium encrypt status
+
+# Hoặc exec vào Cilium pod
+kubectl exec -n kube-system -it <cilium-pod> -- cilium status | grep -i encrypt
+```
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty xử lý dữ liệu nhạy cảm. Theo yêu cầu compliance, tất cả traffic giữa các pod trong cluster phải được mã hóa — kể cả traffic trong cùng một node. Cilium hỗ trợ WireGuard encryption ở tầng kernel, cung cấp hiệu suất cao và bảo mật mạnh.

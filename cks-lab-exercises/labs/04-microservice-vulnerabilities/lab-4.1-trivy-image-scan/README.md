@@ -14,6 +14,70 @@
 
 ---
 
+## Lý thuyết
+
+### CVE và Container Image Vulnerability là gì?
+
+**CVE (Common Vulnerabilities and Exposures)** là hệ thống định danh chuẩn cho các lỗ hổng bảo mật đã được công bố. Mỗi CVE có:
+- **ID**: Ví dụ `CVE-2021-44228` (Log4Shell)
+- **CVSS Score**: 0-10, đánh giá mức độ nghiêm trọng
+- **Mô tả**: Lỗ hổng là gì và ảnh hưởng như thế nào
+
+Container image là tập hợp các layer chứa OS packages, libraries, và application code. Mỗi package có thể chứa CVE. Image cũ = nhiều CVE hơn.
+
+### Mức độ nghiêm trọng CVE
+
+| Mức | CVSS Score | Ý nghĩa | Hành động |
+|-----|-----------|---------|-----------|
+| CRITICAL | 9.0–10.0 | Có thể bị khai thác từ xa, không cần xác thực | Vá ngay lập tức |
+| HIGH | 7.0–8.9 | Ảnh hưởng nghiêm trọng | Vá trong vài ngày |
+| MEDIUM | 4.0–6.9 | Ảnh hưởng vừa phải | Vá trong vài tuần |
+| LOW | 0.1–3.9 | Ảnh hưởng thấp | Vá khi có điều kiện |
+
+### Trivy là gì?
+
+**Trivy** là công cụ open-source của Aqua Security để quét lỗ hổng bảo mật trong:
+- Container images
+- Kubernetes manifests (trivy config)
+- File systems
+- SBOM files
+
+Trivy hoạt động bằng cách:
+1. Pull image và extract các layer
+2. Phân tích package manager database (dpkg, rpm, apk...)
+3. So sánh với vulnerability database (NVD, GitHub Advisory...)
+4. Báo cáo CVE tìm thấy
+
+### Cú pháp Trivy cơ bản
+
+```bash
+# Quét image
+trivy image nginx:1.14.0
+
+# Chỉ hiển thị CRITICAL và HIGH
+trivy image --severity CRITICAL,HIGH nginx:1.14.0
+
+# Chỉ CRITICAL
+trivy image --severity CRITICAL nginx:1.14.0
+
+# Output JSON
+trivy image --format json --output results.json nginx:1.14.0
+
+# Exit code 1 nếu có lỗ hổng (dùng trong CI/CD)
+trivy image --exit-code 1 --severity CRITICAL nginx:1.14.0
+```
+
+### Tại sao dùng Alpine-based image?
+
+Image `nginx:1.25-alpine` dựa trên Alpine Linux — distro tối giản:
+- **Ít package hơn** → ít attack surface hơn
+- **Kích thước nhỏ** (~50MB vs ~200MB Debian-based)
+- **Ít CVE hơn** vì ít dependency hơn
+
+Best practice: Luôn dùng image tag cụ thể (không dùng `latest`) và ưu tiên alpine/distroless image.
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty đang vận hành ứng dụng web trên Kubernetes. Trong quá trình audit bảo mật, bạn phát hiện pod `web-app` trong namespace `trivy-lab` đang sử dụng image `nginx:1.14.0` — một phiên bản cũ có nhiều lỗ hổng CRITICAL đã được công bố.

@@ -14,6 +14,87 @@
 
 ---
 
+## Lý thuyết
+
+### Runtime Security là gì?
+
+**Runtime Security** là bảo vệ workload trong khi đang chạy — phát hiện và phản ứng với hành vi độc hại theo thời gian thực. Khác với static analysis (kiểm tra trước khi deploy), runtime security hoạt động khi container đang chạy.
+
+Tại sao cần runtime security? Ngay cả khi image đã được quét sạch, kẻ tấn công vẫn có thể:
+- Khai thác lỗ hổng zero-day trong ứng dụng
+- Inject malicious code qua user input
+- Tấn công từ bên trong cluster (lateral movement)
+
+### Falco là gì?
+
+**Falco** là công cụ runtime security open-source của CNCF (Cloud Native Computing Foundation), sử dụng **kernel-level monitoring** để phát hiện hành vi bất thường:
+
+```
+Container → System Calls → Linux Kernel → Falco (eBPF/kernel module) → Rules Engine → Alert
+```
+
+Falco intercept system calls ở kernel level — không thể bypass bằng cách đổi tên process hay dùng shell khác.
+
+### Cấu trúc Falco Rule
+
+```yaml
+- rule: Terminal Shell in Container
+  desc: Mô tả ngắn gọn về rule
+  condition: >
+    spawned_process and container
+    and shell_procs
+    and proc.tty != 0
+  output: >
+    Shell spawned (user=%user.name pod=%k8s.pod.name
+    shell=%proc.name cmdline=%proc.cmdline)
+  priority: WARNING
+  tags: [container, shell, mitre_execution]
+```
+
+| Field | Mô tả |
+|-------|-------|
+| `rule` | Tên rule (unique) |
+| `desc` | Mô tả ngắn |
+| `condition` | Điều kiện Falco filter — khi nào rule kích hoạt |
+| `output` | Format thông báo alert |
+| `priority` | Mức độ: DEBUG, INFO, NOTICE, WARNING, ERROR, CRITICAL, ALERT, EMERGENCY |
+| `tags` | Tags để phân loại (MITRE ATT&CK, v.v.) |
+
+### Các macro Falco hữu ích
+
+```yaml
+spawned_process  # evt.type = execve and evt.dir = <
+container        # container.id != host
+shell_procs      # proc.name in (bash, sh, zsh, dash, ...)
+interactive      # proc.tty != 0 (có terminal đính kèm)
+```
+
+### Cách load custom rule
+
+```bash
+# Systemd service
+sudo cp my-rules.yaml /etc/falco/rules.d/
+sudo systemctl restart falco
+
+# DaemonSet
+kubectl create configmap falco-custom-rules \
+  --from-file=my-rules.yaml -n falco
+kubectl rollout restart daemonset/falco -n falco
+```
+
+### Kiểm tra Falco alert
+
+```bash
+# Systemd
+sudo journalctl -u falco -f
+sudo tail -f /var/log/falco.log
+
+# DaemonSet
+kubectl logs -n falco -l app=falco --tail=50
+```
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật đang thiết lập hệ thống phát hiện xâm nhập runtime cho cluster Kubernetes. Một trong những dấu hiệu tấn công phổ biến nhất là kẻ tấn công spawn shell trong container để thực thi lệnh. Bạn cần cấu hình Falco để phát hiện hành vi này.

@@ -15,6 +15,82 @@
 
 ---
 
+## Lý thuyết
+
+### TLS là gì và tại sao cần?
+
+**TLS (Transport Layer Security)** là giao thức mã hóa traffic giữa client và server. Khi bạn truy cập `https://`, TLS đang hoạt động. Không có TLS, traffic đi qua mạng dưới dạng plaintext — bất kỳ ai có thể sniff mạng đều đọc được nội dung.
+
+Trong Kubernetes, **Ingress** là điểm vào duy nhất cho traffic từ bên ngoài vào cluster. Cấu hình TLS tại Ingress đảm bảo:
+- Traffic từ client đến Ingress controller được mã hóa
+- Backend service không cần xử lý TLS (TLS termination tại Ingress)
+
+### TLS Termination là gì?
+
+```
+Client ──[HTTPS/TLS]──► Ingress Controller ──[HTTP]──► Service ──► Pod
+                         (TLS terminated here)
+```
+
+**TLS termination** = Ingress controller giải mã TLS, sau đó chuyển tiếp request dưới dạng HTTP thuần đến backend. Backend không cần biết về TLS — đơn giản hóa ứng dụng và quản lý certificate tập trung.
+
+### Certificate là gì?
+
+TLS cần một cặp:
+- **Private key** (`tls.key`): Khóa bí mật, chỉ server giữ
+- **Certificate** (`tls.crt`): Chứa public key + thông tin server, gửi cho client để xác thực
+
+**Self-signed certificate**: Certificate tự ký — không được CA (Certificate Authority) tin cậy, dùng cho lab/internal. Trình duyệt sẽ cảnh báo "Not secure" nhưng vẫn mã hóa được.
+
+**CA-signed certificate**: Certificate được ký bởi CA tin cậy (Let's Encrypt, DigiCert...) — trình duyệt tin tưởng mặc định. Dùng cho production.
+
+### Tạo self-signed certificate bằng openssl
+
+```bash
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout tls.key \    # Output: private key
+  -out tls.crt \       # Output: certificate
+  -subj "/CN=myapp.example.com/O=myorg"
+#          ↑ Common Name = domain name
+```
+
+Giải thích các flag:
+- `-x509`: Tạo self-signed cert (không phải CSR)
+- `-nodes`: Không mã hóa private key bằng passphrase
+- `-days 365`: Cert có hiệu lực 365 ngày
+- `-newkey rsa:2048`: Tạo RSA key 2048-bit mới
+
+### Kubernetes TLS Secret
+
+Kubernetes có Secret type đặc biệt cho TLS:
+
+```bash
+kubectl create secret tls <tên-secret> \
+  --cert=tls.crt \
+  --key=tls.key \
+  -n <namespace>
+```
+
+Secret này có `type: kubernetes.io/tls` và chứa 2 key: `tls.crt` và `tls.key`.
+
+### Cấu hình Ingress với TLS
+
+```yaml
+spec:
+  tls:
+  - hosts:
+    - myapp.example.com    # Phải khớp với host trong spec.rules
+    secretName: myapp-tls  # Tên TLS Secret
+  rules:
+  - host: myapp.example.com
+    http:
+      paths: [...]
+```
+
+> **Lưu ý:** `hosts` trong `spec.tls` phải khớp với `host` trong `spec.rules` để TLS hoạt động đúng.
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty fintech. Nhóm DevOps vừa triển khai một ứng dụng web trong namespace `tls-lab`, nhưng hiện tại chỉ có HTTP. Yêu cầu bảo mật nội bộ bắt buộc tất cả traffic phải được mã hóa qua HTTPS.

@@ -15,6 +15,63 @@
 
 ---
 
+## Lý thuyết
+
+### Container Runtime là gì?
+
+**Container Runtime** là phần mềm chịu trách nhiệm chạy container. Kubernetes hỗ trợ nhiều runtime thông qua **CRI (Container Runtime Interface)**:
+
+| Runtime | Handler | Cơ chế cô lập | Overhead |
+|---------|---------|--------------|---------|
+| **runc** (mặc định) | `runc` | Linux namespaces + cgroups | Thấp |
+| **gVisor** | `runsc` | User-space kernel | Trung bình |
+| **kata-containers** | `kata` | Lightweight VM | Cao |
+
+### Tại sao cần Sandbox Runtime?
+
+Container thông thường (runc) chia sẻ kernel với host. Nếu có lỗ hổng kernel, container có thể escape ra host. **Sandbox runtime** cung cấp lớp cô lập bổ sung:
+
+```
+runc:  Container → Linux Kernel (shared) → Host
+gVisor: Container → gVisor (user-space kernel) → Linux Kernel → Host
+kata:  Container → Guest Kernel → Hypervisor → Host Kernel → Host
+```
+
+### gVisor là gì?
+
+**gVisor** (Google) là sandbox runtime intercept system calls từ container và xử lý trong user space — container không gọi trực tiếp vào host kernel. Giảm attack surface đáng kể.
+
+### RuntimeClass trong Kubernetes
+
+**RuntimeClass** là Kubernetes resource cho phép chỉ định runtime cho từng pod:
+
+```yaml
+# Tạo RuntimeClass
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: gvisor
+handler: runsc  # Tên handler trên node (phải khớp với containerd config)
+```
+
+```yaml
+# Dùng trong pod
+spec:
+  runtimeClassName: gvisor  # Tham chiếu đến RuntimeClass
+  containers: [...]
+```
+
+### Khi nào dùng sandbox runtime?
+
+- Workload xử lý dữ liệu không tin cậy (user-uploaded content)
+- Multi-tenant environment (nhiều khách hàng trên cùng cluster)
+- Workload có yêu cầu compliance cao (PCI-DSS, HIPAA)
+- Khi cần cô lập mạnh hơn giữa các tenant
+
+> **Lưu ý:** Trong lab này, gVisor có thể chưa được cài đặt trên node. Bài lab tập trung vào việc tạo đúng cấu hình RuntimeClass và pod spec — pod có thể ở trạng thái `Pending` nếu node không hỗ trợ `runsc`.
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty cung cấp dịch vụ multi-tenant. Một số workload xử lý dữ liệu nhạy cảm từ nhiều khách hàng khác nhau và cần được cô lập mạnh hơn so với container thông thường.

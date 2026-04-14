@@ -15,6 +15,79 @@
 
 ---
 
+## Lý thuyết
+
+### kube-apiserver là gì?
+
+**kube-apiserver** là thành phần trung tâm của Kubernetes — tất cả request (từ kubectl, controller, kubelet, pod...) đều đi qua đây. Bảo mật kube-apiserver là ưu tiên hàng đầu vì nếu bị compromise, toàn bộ cluster bị kiểm soát.
+
+### Anonymous Authentication
+
+Mặc định, kube-apiserver cho phép request **không có credentials** với identity:
+- Username: `system:anonymous`
+- Group: `system:unauthenticated`
+
+Rủi ro: Nếu RBAC cấu hình sai (vô tình cấp quyền cho `system:unauthenticated`), bất kỳ ai cũng có thể truy cập API mà không cần xác thực.
+
+```bash
+# Tắt anonymous auth
+--anonymous-auth=false
+```
+
+### Authorization Modes
+
+kube-apiserver hỗ trợ nhiều authorization mode. Trong production cần có:
+
+| Mode | Mô tả | Bắt buộc? |
+|------|-------|-----------|
+| `Node` | Cho phép kubelet authorize các request liên quan đến node/pod của nó | ✅ Bắt buộc |
+| `RBAC` | Phân quyền dựa trên Role/ClusterRole | ✅ Bắt buộc |
+| `AlwaysAllow` | Cho phép tất cả — không dùng production | ❌ Nguy hiểm |
+| `AlwaysDeny` | Từ chối tất cả | ❌ Không dùng được |
+
+```yaml
+--authorization-mode=Node,RBAC
+# Thứ tự quan trọng: Node được kiểm tra trước RBAC
+```
+
+### NodeRestriction Admission Plugin
+
+**NodeRestriction** là admission plugin giới hạn quyền của kubelet:
+- Kubelet chỉ có thể sửa Node/Pod object của **chính node đó**
+- Không thể sửa Node/Pod của node khác
+- Không thể thêm label với prefix `node-restriction.kubernetes.io/`
+
+Tại sao cần? Nếu một node bị compromise, kẻ tấn công không thể dùng kubelet credentials để tấn công các node khác.
+
+```yaml
+--enable-admission-plugins=NodeRestriction
+```
+
+### Admission Controllers là gì?
+
+**Admission Controllers** là các plugin chạy sau authentication/authorization, trước khi request được lưu vào etcd. Chúng có thể:
+- **Validate**: Từ chối request không hợp lệ (ví dụ: NodeRestriction, PSS)
+- **Mutate**: Tự động thêm/sửa field (ví dụ: DefaultStorageClass)
+
+```
+Request → Authentication → Authorization → Admission Controllers → etcd
+```
+
+### Kiểm tra cấu hình kube-apiserver hiện tại
+
+```bash
+# Xem tất cả flag đang chạy
+kubectl get pod kube-apiserver-$(hostname) -n kube-system \
+  -o jsonpath='{.spec.containers[0].command}' | tr ',' '\n' | sort
+
+# Kiểm tra flag cụ thể
+kubectl get pod kube-apiserver-$(hostname) -n kube-system \
+  -o jsonpath='{.spec.containers[0].command}' | tr ',' '\n' | \
+  grep -E "anonymous-auth|admission-plugins|authorization-mode"
+```
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật đang thực hiện hardening cho Kubernetes cluster trước khi đưa vào production. Security audit đã phát hiện kube-apiserver đang cho phép anonymous access và thiếu NodeRestriction admission plugin — hai vấn đề bảo mật nghiêm trọng.

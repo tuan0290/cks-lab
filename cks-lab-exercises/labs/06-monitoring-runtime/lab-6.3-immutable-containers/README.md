@@ -15,6 +15,92 @@
 
 ---
 
+## Lý thuyết
+
+### Immutable Infrastructure là gì?
+
+**Immutable Infrastructure** là nguyên tắc: sau khi deploy, không sửa đổi trực tiếp — thay vào đó, tạo mới và thay thế. Áp dụng cho container: container không nên ghi vào filesystem của nó sau khi khởi động.
+
+**Tại sao immutable container quan trọng?**
+
+Nếu container có thể ghi vào filesystem, kẻ tấn công sau khi xâm nhập có thể:
+- Cài backdoor hoặc malware vào `/usr/bin/`
+- Sửa đổi binary của ứng dụng
+- Ghi script để duy trì persistence
+- Thay đổi cấu hình để leo thang đặc quyền
+
+### readOnlyRootFilesystem
+
+`readOnlyRootFilesystem: true` mount root filesystem của container ở chế độ **read-only**:
+
+```yaml
+containers:
+- name: app
+  securityContext:
+    readOnlyRootFilesystem: true  # Root filesystem chỉ đọc
+```
+
+Khi bật, mọi write operation vào filesystem gốc sẽ bị từ chối:
+```
+sh: can't create /etc/test: Read-only file system
+```
+
+### emptyDir — Cho phép ghi vào thư mục cụ thể
+
+Ứng dụng thường cần ghi vào một số thư mục (`/tmp`, `/var/run`, `/var/cache`). Dùng `emptyDir` volume để mount thư mục có thể ghi riêng biệt:
+
+```yaml
+spec:
+  containers:
+  - name: app
+    securityContext:
+      readOnlyRootFilesystem: true
+    volumeMounts:
+    - name: tmp-dir
+      mountPath: /tmp        # Cho phép ghi vào /tmp
+    - name: run-dir
+      mountPath: /var/run    # Cho phép ghi vào /var/run
+  volumes:
+  - name: tmp-dir
+    emptyDir: {}             # Tạo thư mục tạm thời trên node
+  - name: run-dir
+    emptyDir: {}
+```
+
+**emptyDir** là volume tạm thời:
+- Được tạo khi pod khởi động
+- Bị xóa khi pod bị xóa
+- Không persist qua pod restart
+
+### Kiểm tra immutability
+
+```bash
+# Thử ghi vào root filesystem (phải fail)
+kubectl exec <pod> -- touch /etc/test
+# Expected: touch: /etc/test: Read-only file system
+
+# Thử ghi vào emptyDir (phải thành công)
+kubectl exec <pod> -- touch /tmp/test
+# Expected: thành công
+
+# Kiểm tra securityContext
+kubectl get pod <pod> -o jsonpath='{.spec.containers[0].securityContext.readOnlyRootFilesystem}'
+# Expected: true
+```
+
+### Defense in Depth với immutable containers
+
+```yaml
+securityContext:
+  readOnlyRootFilesystem: true   # Không ghi vào filesystem
+  runAsNonRoot: true             # Không chạy với root
+  allowPrivilegeEscalation: false  # Không leo thang đặc quyền
+  capabilities:
+    drop: [ALL]                  # Drop tất cả capabilities
+```
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật đang review cấu hình pod trong namespace `immutable-lab`. Pod `mutable-app` hiện tại có thể ghi vào bất kỳ đâu trong filesystem — đây là rủi ro bảo mật vì kẻ tấn công có thể ghi malware hoặc thay đổi binary trong container.

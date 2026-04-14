@@ -14,6 +14,104 @@
 
 ---
 
+## Lý thuyết
+
+### Attack Surface là gì?
+
+**Attack Surface** là tổng hợp tất cả các điểm mà kẻ tấn công có thể cố gắng xâm nhập vào hệ thống. Mỗi package, service, và port mở là một điểm tiềm năng:
+
+```
+Package không cần thiết → Binary có thể bị lạm dụng (nmap, netcat, telnet)
+Service không cần thiết → Tiến trình chạy nền có thể bị exploit
+Port mở không cần thiết → Điểm vào mạng tiềm năng
+```
+
+**Nguyên tắc:** Giảm attack surface = giảm rủi ro bị tấn công.
+
+### Tại sao Kubernetes node cần minimize OS footprint?
+
+Kubernetes worker node chạy nhiều container từ nhiều ứng dụng khác nhau. Nếu một container bị compromise và kẻ tấn công escape ra node:
+
+1. **Không có nmap/netcat** → Khó scan mạng nội bộ để tìm target tiếp theo
+2. **Không có telnet** → Khó tạo reverse shell đơn giản
+3. **Không có service không cần thiết** → Ít tiến trình có thể bị exploit
+4. **Ít port mở** → Ít điểm vào mạng
+
+### CIS Benchmark Section 4 — Worker Node Security
+
+CIS Kubernetes Benchmark Section 4 định nghĩa các tiêu chuẩn cho worker node:
+
+| Check | Mô tả |
+|-------|-------|
+| 4.1.1 | kubelet service file permissions ≤ 644 |
+| 4.2.1 | `--anonymous-auth=false` trên kubelet |
+| 4.2.6 | `--protect-kernel-defaults=true` trên kubelet |
+
+Minimize OS footprint là một phần của "giảm attack surface" theo CIS Benchmark.
+
+### Các lệnh kiểm tra OS footprint
+
+**Liệt kê package đã cài:**
+```bash
+# Debian/Ubuntu
+dpkg --list
+dpkg --list | grep -E "telnet|nmap|netcat|wireshark"
+
+# RHEL/CentOS
+rpm -qa
+rpm -qa | grep -E "telnet|nmap|netcat"
+```
+
+**Kiểm tra service đang chạy:**
+```bash
+# Xem tất cả service đang active
+systemctl list-units --type=service --state=running
+
+# Xem tất cả service đang enabled (sẽ tự khởi động khi reboot)
+systemctl list-unit-files --type=service --state=enabled
+```
+
+**Kiểm tra port đang lắng nghe:**
+```bash
+# ss — công cụ hiện đại thay thế netstat
+ss -tlnp          # TCP listening
+ss -ulnp          # UDP listening
+
+# Giải thích flags: -t=TCP, -l=listening, -n=số port, -p=process
+```
+
+### Service thường cần disable trên Kubernetes node
+
+| Service | Lý do |
+|---------|-------|
+| `snapd` | Package manager không cần thiết trên server |
+| `bluetooth` | Không có phần cứng Bluetooth trên server/VM |
+| `avahi-daemon` | mDNS/DNS-SD, không cần thiết khi có DNS |
+| `cups` | Print service, không cần thiết |
+| `rpcbind` | RPC portmapper, chỉ cần nếu dùng NFS |
+
+**Cách disable service:**
+```bash
+# Disable và stop ngay lập tức
+sudo systemctl disable --now <service-name>
+
+# Kiểm tra đã disabled
+systemctl is-enabled <service-name>  # → disabled
+systemctl is-active <service-name>   # → inactive
+```
+
+### ⚠️ Cảnh báo: KHÔNG xóa package hệ thống
+
+Trên Kubernetes node, KHÔNG xóa:
+- `kubelet` — agent chạy trên mỗi node
+- `containerd` hoặc `docker` — container runtime
+- `kubeadm` — công cụ quản lý cluster
+- `kubectl` — CLI Kubernetes
+
+Xóa các package này sẽ làm hỏng node và có thể gây mất dữ liệu.
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật vừa tiếp nhận một worker node mới và cần hardening trước khi đưa vào production cluster. Theo CIS Benchmark Section 4 (Worker Node Security Configuration), mọi package và service không cần thiết phải được loại bỏ để giảm thiểu attack surface.

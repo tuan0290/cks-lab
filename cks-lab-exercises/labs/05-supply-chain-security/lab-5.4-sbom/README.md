@@ -15,6 +15,71 @@
 
 ---
 
+## Lý thuyết
+
+### SBOM là gì?
+
+**SBOM (Software Bill of Materials)** là danh sách đầy đủ và chính xác các thành phần phần mềm trong một artifact — tương tự như danh sách nguyên liệu trong sản xuất. Mỗi entry trong SBOM bao gồm:
+- Tên và phiên bản package
+- License
+- Dependency relationships
+- Thông tin nguồn gốc (provenance)
+
+### Tại sao SBOM quan trọng?
+
+Khi có CVE mới được công bố (ví dụ: Log4Shell), bạn cần biết ngay:
+- Image nào trong cluster đang dùng Log4j?
+- Phiên bản nào?
+
+Không có SBOM → phải quét lại tất cả image. Có SBOM → tra cứu ngay trong database.
+
+### Các định dạng SBOM phổ biến
+
+| Định dạng | Tổ chức | Ứng dụng |
+|-----------|---------|---------|
+| **SPDX** | Linux Foundation | License compliance, security |
+| **CycloneDX** | OWASP | Security-focused |
+| **Syft JSON** | Anchore | Syft native format |
+
+### syft là gì?
+
+**syft** là công cụ tạo SBOM từ container image, filesystem, hoặc directory:
+
+```bash
+# Tạo SBOM ở định dạng SPDX-JSON
+syft nginx:1.25-alpine -o spdx-json=sbom.json
+
+# Tạo SBOM ở định dạng CycloneDX
+syft nginx:1.25-alpine -o cyclonedx-json=sbom.json
+
+# Xem tóm tắt packages
+syft nginx:1.25-alpine
+```
+
+### Quét SBOM tìm lỗ hổng
+
+Sau khi có SBOM, dùng trivy để quét:
+
+```bash
+# Quét SBOM file
+trivy sbom sbom.json
+
+# Chỉ CRITICAL và HIGH
+trivy sbom sbom.json --severity CRITICAL,HIGH
+```
+
+**Ưu điểm của SBOM-based scanning:**
+- Không cần pull image mỗi lần quét
+- Có thể lưu trữ và audit SBOM
+- Chia sẻ với khách hàng/auditor
+- Tích hợp CI/CD dễ hơn
+
+### SBOM trong CKS 2024
+
+Linux Foundation đã cập nhật CKS curriculum (10/2024) để nhấn mạnh Supply Chain Security, bao gồm SBOM workflow. Đây là topic mới và quan trọng trong kỳ thi.
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật đang xây dựng quy trình kiểm tra bảo mật cho container images trước khi deploy. Một phần quan trọng của supply chain security là biết chính xác những gì có trong image — đây là mục đích của SBOM.

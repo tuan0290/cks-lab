@@ -14,6 +14,76 @@
 
 ---
 
+## Lý thuyết
+
+### CIS Benchmark là gì?
+
+**CIS (Center for Internet Security)** là tổ chức phi lợi nhuận chuyên phát triển các tiêu chuẩn bảo mật được cộng đồng đồng thuận. **CIS Kubernetes Benchmark** là tập hợp các best practice bảo mật cho Kubernetes cluster, bao gồm hàng trăm kiểm tra cụ thể cho từng thành phần.
+
+Mỗi kiểm tra có dạng:
+- **ID**: Ví dụ `1.2.1` (Section 1, Subsection 2, Check 1)
+- **Mô tả**: "Ensure that the --anonymous-auth argument is set to false"
+- **Lý do**: Tại sao cần thiết
+- **Cách sửa**: Lệnh hoặc cấu hình cụ thể
+
+### kube-bench là gì?
+
+**kube-bench** là công cụ open-source của Aqua Security tự động hóa việc kiểm tra CIS Kubernetes Benchmark. Thay vì kiểm tra thủ công từng item, kube-bench chạy tất cả checks và báo cáo kết quả:
+
+```
+[PASS] 1.2.1 Ensure that the --anonymous-auth argument is set to false
+[FAIL] 1.2.16 Ensure that the --profiling argument is set to false
+[WARN] 1.2.20 Ensure that the --audit-log-path argument is set
+[INFO] 1.2.21 Ensure that the --audit-log-maxage argument is set to 30 or as appropriate
+```
+
+### Các thành phần được kiểm tra
+
+| Section | Thành phần | Ví dụ checks |
+|---------|-----------|--------------|
+| 1.x | kube-apiserver | anonymous-auth, audit logging, TLS |
+| 2.x | etcd | TLS, authentication |
+| 3.x | Control Plane | Scheduler, Controller Manager |
+| 4.x | Worker Node | kubelet config, file permissions |
+| 5.x | Policies | RBAC, Network Policies |
+
+### Các flag quan trọng của kube-apiserver
+
+Hai flag thường bị FAIL nhất trong CKS:
+
+**`--anonymous-auth=false`**
+- Mặc định: `true` — cho phép request không có credentials với identity `system:anonymous`
+- Rủi ro: Nếu RBAC cấu hình sai, anonymous user có thể truy cập API
+- Fix: Thêm `--anonymous-auth=false` vào kube-apiserver manifest
+
+**`--profiling=false`**
+- Mặc định: `true` — expose endpoint `/debug/pprof` chứa thông tin profiling
+- Rủi ro: Lộ thông tin về cấu trúc nội bộ, có thể bị dùng để tấn công DoS
+- Fix: Thêm `--profiling=false` vào kube-apiserver manifest
+
+### kube-apiserver là static pod
+
+Trên cluster được tạo bởi kubeadm, kube-apiserver chạy dưới dạng **static pod** — được quản lý bởi kubelet thông qua file manifest tại:
+
+```
+/etc/kubernetes/manifests/kube-apiserver.yaml
+```
+
+Khi bạn sửa file này, kubelet **tự động** phát hiện thay đổi và restart kube-apiserver (khoảng 30-60 giây). Không cần chạy lệnh restart thủ công.
+
+```bash
+# Backup trước khi sửa
+sudo cp /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/kube-apiserver.yaml.bak
+
+# Sửa manifest
+sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml
+
+# Theo dõi quá trình restart
+kubectl get pods -n kube-system -l component=kube-apiserver -w
+```
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật vừa tiếp nhận một Kubernetes cluster mới. Trước khi đưa vào production, bạn cần kiểm tra cluster có tuân thủ CIS Kubernetes Benchmark không. Công cụ `kube-bench` của Aqua Security tự động hóa quá trình này bằng cách kiểm tra các cấu hình theo tiêu chuẩn CIS.

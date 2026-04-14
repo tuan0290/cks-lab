@@ -15,6 +15,71 @@
 
 ---
 
+## Lý thuyết
+
+### Kubernetes Secret là gì?
+
+**Kubernetes Secret** là object lưu trữ dữ liệu nhạy cảm (password, API key, certificate...) dưới dạng base64-encoded. Secret tách biệt dữ liệu nhạy cảm khỏi pod spec — không cần hardcode trong image hay manifest.
+
+### 2 cách mount Secret vào pod
+
+**Cách 1: Environment Variable (KHÔNG khuyến nghị)**
+```yaml
+env:
+- name: DB_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: my-secret
+      key: password
+```
+
+**Cách 2: Volume Mount (KHUYẾN NGHỊ)**
+```yaml
+volumeMounts:
+- name: secret-vol
+  mountPath: /etc/secrets
+  readOnly: true
+volumes:
+- name: secret-vol
+  secret:
+    secretName: my-secret
+    defaultMode: 0400  # Chỉ owner đọc được
+```
+
+### Tại sao env var không an toàn?
+
+| Vấn đề | Env Var | Volume Mount |
+|--------|---------|--------------|
+| Hiển thị trong `kubectl describe pod` | Tên env var lộ | Không lộ |
+| Kế thừa bởi child process | ✅ Có | ❌ Không |
+| Ghi vào crash dump/log | Có thể | Không |
+| Rotation không restart pod | ❌ Không | ✅ Có (tự động) |
+| Kiểm soát permission | ❌ Không | ✅ Có (defaultMode) |
+
+### defaultMode là gì?
+
+`defaultMode` là octal permission cho file Secret được mount:
+
+```yaml
+volumes:
+- name: secret-vol
+  secret:
+    secretName: my-secret
+    defaultMode: 0400  # r-------- (chỉ owner đọc)
+```
+
+| Giá trị | Permission | Ý nghĩa |
+|---------|-----------|---------|
+| `0400` | `r--------` | Chỉ owner đọc (khuyến nghị) |
+| `0440` | `r--r-----` | Owner và group đọc |
+| `0444` | `r--r--r--` | Tất cả đọc (không khuyến nghị) |
+
+### Secret rotation
+
+Khi Secret được mount dưới dạng volume, Kubernetes **tự động cập nhật** file trong container khi Secret thay đổi (sau ~1-2 phút). Không cần restart pod — đây là ưu điểm lớn so với env var.
+
+---
+
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật đang review cấu hình của một ứng dụng trong namespace `secret-lab`. Bạn phát hiện pod `insecure-app` đang mount Secret `app-credentials` qua **environment variable** — cách này không an toàn vì:
