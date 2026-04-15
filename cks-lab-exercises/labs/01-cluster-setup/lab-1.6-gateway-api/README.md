@@ -180,11 +180,11 @@ bash setup.sh
 
 ### Bước 1: Cài đặt Gateway API CRDs
 
-Gateway API CRDs không có sẵn trong Kubernetes — cần cài thêm:
+Gateway API CRDs không có sẵn trong Kubernetes — cần cài thêm. NGINX Gateway Fabric v2.5.1 dùng phiên bản CRD cụ thể:
 
 ```bash
-# Cài đặt Gateway API CRDs (Standard channel)
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml
+# Cài đặt Gateway API CRDs tương thích với NGF v2.5.1
+kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v2.5.1" | kubectl apply -f -
 
 # Xác minh CRDs đã được cài
 kubectl get crd | grep gateway.networking.k8s.io
@@ -194,28 +194,27 @@ kubectl get crd | grep gateway.networking.k8s.io
 # referencegrants.gateway.networking.k8s.io
 ```
 
+> **Lưu ý:** Nếu đã cài CRDs từ nguồn khác (lab-1.3 hoặc trước đó), kiểm tra version tương thích trước khi cài lại.
+
 ---
 
 ### Bước 2: Cài đặt NGINX Gateway Fabric (Gateway Controller)
 
 ```bash
-# Thêm Helm repo
-helm repo add nginx-gateway https://helm.nginx.com/stable
-helm repo update
+# Cài đặt Gateway API CRDs theo phiên bản tương thích với NGF v2.5.1
+kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v2.5.1" | kubectl apply -f -
 
-# Cài đặt NGINX Gateway Fabric
-helm install nginx-gateway nginx-gateway/nginx-gateway-fabric \
-  --namespace nginx-gateway \
+# Cài đặt NGINX Gateway Fabric từ OCI registry (không cần helm repo add)
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
   --create-namespace \
-  --set service.type=NodePort \
-  --set service.nodePorts.http=31080 \
-  --set service.nodePorts.https=31443
+  --namespace nginx-gateway \
+  --set nginx.service.type=NodePort
 
 # Chờ controller sẵn sàng
-kubectl wait --namespace nginx-gateway \
-  --for=condition=ready pod \
-  --selector=app.kubernetes.io/name=nginx-gateway-fabric \
-  --timeout=120s
+kubectl wait --timeout=5m \
+  -n nginx-gateway \
+  deployment/ngf-nginx-gateway-fabric \
+  --for=condition=Available
 
 # Xác minh
 kubectl get pods -n nginx-gateway
@@ -352,9 +351,13 @@ kubectl describe httproute app-route -n gateway-lab
 ### Bước 7: Test HTTPS qua Gateway API
 
 ```bash
-# Lấy NodePort của Gateway Controller
+# NGF tạo Service riêng cho mỗi Gateway — lấy NodePort từ Service đó
+# Xem tất cả Service trong nginx-gateway namespace
+kubectl get svc -n nginx-gateway
+
+# Lấy NodePort HTTPS (port 443)
 HTTPS_PORT=$(kubectl get svc -n nginx-gateway \
-  -o jsonpath='{.items[0].spec.ports[?(@.name=="https")].nodePort}' 2>/dev/null || echo "31443")
+  -o jsonpath='{.items[0].spec.ports[?(@.port==443)].nodePort}' 2>/dev/null)
 NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
 
 echo "Test URL: https://$NODE_IP:$HTTPS_PORT/"

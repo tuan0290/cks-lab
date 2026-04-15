@@ -116,7 +116,7 @@ else
   echo ""
   echo "Test HTTPS:"
   HTTPS_PORT=$(kubectl get svc -n nginx-gateway \
-    -o jsonpath='{.items[0].spec.ports[?(@.name=="https")].nodePort}' 2>/dev/null || echo "31443")
+    -o jsonpath='{.items[0].spec.ports[?(@.port==443)].nodePort}' 2>/dev/null || echo "443")
   NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
   echo "  curl -k -H 'Host: app.gateway-lab.local' https://${NODE_IP}:${HTTPS_PORT}/"
   echo ""
