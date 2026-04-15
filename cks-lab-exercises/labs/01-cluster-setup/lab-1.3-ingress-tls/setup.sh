@@ -12,21 +12,58 @@ echo "=========================================="
 # --- Kiểm tra prerequisites ---
 
 if ! command -v kubectl &>/dev/null; then
-  echo "[ERROR] kubectl không tìm thấy. Vui lòng cài đặt kubectl trước."
+  echo "[ERROR] kubectl không tìm thấy."
   exit 1
 fi
 
 if ! kubectl cluster-info &>/dev/null; then
   echo "[ERROR] Không thể kết nối đến Kubernetes cluster."
-  echo "        Kiểm tra kubeconfig: kubectl cluster-info"
   exit 1
 fi
 
 echo "[OK] kubectl và cluster kết nối thành công."
 
 if ! command -v openssl &>/dev/null; then
-  echo "[WARN] openssl không tìm thấy. Bạn sẽ cần openssl để tạo TLS certificate."
-  echo "       Cài đặt: apt-get install openssl  hoặc  yum install openssl"
+  echo "[WARN] openssl không tìm thấy. Cài đặt: apt-get install openssl"
+fi
+
+# --- Kiểm tra Ingress Controller ---
+
+echo ""
+echo "Kiểm tra Ingress Controller..."
+
+INGRESS_RUNNING=$(kubectl get pods --all-namespaces -l app.kubernetes.io/component=controller \
+  --no-headers 2>/dev/null | grep -c "Running" || true)
+
+if [ "$INGRESS_RUNNING" -gt 0 ]; then
+  echo "[OK] Ingress Controller đã có sẵn ($INGRESS_RUNNING pod đang Running)."
+  kubectl get pods --all-namespaces -l app.kubernetes.io/component=controller --no-headers 2>/dev/null
+else
+  echo "[INFO] Chưa có Ingress Controller. Bạn cần cài đặt ở Bước 2 trong README.md."
+  echo ""
+  echo "  Cài đặt nhanh bằng Helm:"
+  echo "    helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx"
+  echo "    helm repo update"
+  echo "    helm install ingress-nginx ingress-nginx/ingress-nginx \\"
+  echo "      --namespace ingress-nginx --create-namespace \\"
+  echo "      --set controller.service.type=NodePort \\"
+  echo "      --set controller.service.nodePorts.http=30080 \\"
+  echo "      --set controller.service.nodePorts.https=30443"
+  echo ""
+  echo "  Hoặc không dùng Helm:"
+  echo "    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/baremetal/deploy.yaml"
+fi
+
+# --- Kiểm tra IngressClass ---
+
+echo ""
+echo "Kiểm tra IngressClass..."
+INGRESSCLASS=$(kubectl get ingressclass --no-headers 2>/dev/null | head -3)
+if [ -n "$INGRESSCLASS" ]; then
+  echo "[OK] IngressClass có sẵn:"
+  echo "$INGRESSCLASS"
+else
+  echo "[INFO] Chưa có IngressClass — sẽ được tạo khi cài Ingress Controller."
 fi
 
 # --- Tạo namespace tls-lab ---
@@ -112,29 +149,32 @@ echo "=========================================="
 echo ""
 echo "Tài nguyên đã tạo:"
 echo "  Namespace:  tls-lab"
-echo "  Deployment: nginx-deployment (namespace: tls-lab)"
-echo "  Service:    nginx-service    (namespace: tls-lab, port: 80)"
+echo "  Deployment: nginx-deployment (tls-lab)"
+echo "  Service:    nginx-service (tls-lab, port: 80)"
 echo ""
-echo "Bước tiếp theo:"
-echo "  1. Đọc README.md để hiểu yêu cầu bài lab"
+echo "BƯỚC TIẾP THEO (theo thứ tự):"
 echo ""
-echo "  2. Tạo self-signed TLS certificate:"
-echo "     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \\"
-echo "       -keyout /tmp/tls-lab/tls.key \\"
-echo "       -out /tmp/tls-lab/tls.crt \\"
-echo "       -subj \"/CN=app.tls-lab.local/O=tls-lab\""
+echo "  Bước 1: Kiểm tra Ingress Controller"
+echo "    kubectl get pods -n ingress-nginx"
+echo "    kubectl get ingressclass"
 echo ""
-echo "  3. Tạo Kubernetes TLS Secret:"
-echo "     kubectl create secret tls tls-secret \\"
-echo "       --cert=/tmp/tls-lab/tls.crt \\"
-echo "       --key=/tmp/tls-lab/tls.key \\"
-echo "       -n tls-lab"
+echo "  Bước 2: Cài Ingress Controller nếu chưa có (xem README.md)"
 echo ""
-echo "  4. Tạo Ingress với TLS configuration"
+echo "  Bước 3: Tạo TLS certificate"
+echo "    mkdir -p /tmp/tls-lab"
+echo "    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \\"
+echo "      -keyout /tmp/tls-lab/tls.key -out /tmp/tls-lab/tls.crt \\"
+echo "      -subj \"/CN=app.tls-lab.local/O=tls-lab\""
 echo ""
-echo "  5. Chạy verify.sh để kiểm tra kết quả:"
-echo "     bash verify.sh"
+echo "  Bước 4: Tạo TLS Secret"
+echo "    kubectl create secret tls tls-secret \\"
+echo "      --cert=/tmp/tls-lab/tls.crt --key=/tmp/tls-lab/tls.key -n tls-lab"
 echo ""
-echo "Dọn dẹp sau khi hoàn thành:"
-echo "  bash cleanup.sh"
+echo "  Bước 5: Tạo Ingress với ingressClassName: nginx và TLS"
+echo ""
+echo "  Bước 6: Test HTTPS với curl"
+echo ""
+echo "  Bước 7: bash verify.sh"
+echo ""
+echo "Dọn dẹp: bash cleanup.sh"
 echo ""

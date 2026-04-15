@@ -1,105 +1,135 @@
 # Lab 1.3 – Ingress TLS
 
 **Domain:** Cluster Setup (15%)
-**Thời gian ước tính:** 25 phút
+**Thời gian ước tính:** 30 phút
 **Độ khó:** Trung bình
 
 ---
 
 ## Mục tiêu
 
+- Hiểu kiến trúc Ingress: **Ingress Controller** → **IngressClass** → **Ingress resource**
+- Cài đặt NGINX Ingress Controller bằng Helm
 - Tạo self-signed TLS certificate bằng `openssl`
-- Tạo Kubernetes Secret kiểu `kubernetes.io/tls` từ certificate và private key
-- Cấu hình Ingress resource với TLS termination
-- Xác minh kết nối HTTPS hoạt động đúng qua Ingress
+- Tạo Kubernetes Secret kiểu `kubernetes.io/tls`
+- Cấu hình Ingress resource với TLS termination và đúng `ingressClassName`
+- Xác minh HTTPS hoạt động thực sự qua `curl -k`
 
 ---
 
 ## Lý thuyết
 
-### TLS là gì và tại sao cần?
+### Ingress hoạt động như thế nào? — 3 thành phần bắt buộc
 
-**TLS (Transport Layer Security)** là giao thức mã hóa traffic giữa client và server. Khi bạn truy cập `https://`, TLS đang hoạt động. Không có TLS, traffic đi qua mạng dưới dạng plaintext — bất kỳ ai có thể sniff mạng đều đọc được nội dung.
-
-Trong Kubernetes, **Ingress** là điểm vào duy nhất cho traffic từ bên ngoài vào cluster. Cấu hình TLS tại Ingress đảm bảo:
-- Traffic từ client đến Ingress controller được mã hóa
-- Backend service không cần xử lý TLS (TLS termination tại Ingress)
-
-### TLS Termination là gì?
+Đây là điểm **hay bị hiểu nhầm nhất**: Ingress resource chỉ là **cấu hình** — nó không tự xử lý traffic. Cần đủ 3 thành phần:
 
 ```
-Client ──[HTTPS/TLS]──► Ingress Controller ──[HTTP]──► Service ──► Pod
-                         (TLS terminated here)
+┌─────────────────────────────────────────────────────────┐
+│  1. Ingress Controller (Pod thực sự xử lý traffic)       │
+│     └─ nginx-ingress-controller, traefik, haproxy...     │
+│                                                          │
+│  2. IngressClass (liên kết Controller với Ingress)       │
+│     └─ nginx, traefik, haproxy...                        │
+│                                                          │
+│  3. Ingress resource (cấu hình routing rules)            │
+│     └─ host, path, TLS, backend service                  │
+└─────────────────────────────────────────────────────────┘
 ```
 
-**TLS termination** = Ingress controller giải mã TLS, sau đó chuyển tiếp request dưới dạng HTTP thuần đến backend. Backend không cần biết về TLS — đơn giản hóa ứng dụng và quản lý certificate tập trung.
+**Nếu thiếu Ingress Controller** → Ingress resource được tạo nhưng không có gì xử lý traffic → HTTPS không hoạt động.
 
-### Certificate là gì?
+**Nếu thiếu IngressClass** → Ingress Controller không biết Ingress resource nào thuộc về nó → bị bỏ qua.
 
-TLS cần một cặp:
-- **Private key** (`tls.key`): Khóa bí mật, chỉ server giữ
-- **Certificate** (`tls.crt`): Chứa public key + thông tin server, gửi cho client để xác thực
+### Ingress Controller là gì?
 
-**Self-signed certificate**: Certificate tự ký — không được CA (Certificate Authority) tin cậy, dùng cho lab/internal. Trình duyệt sẽ cảnh báo "Not secure" nhưng vẫn mã hóa được.
+**Ingress Controller** là một Pod chạy trong cluster, lắng nghe trên port 80/443, đọc Ingress resources và cấu hình reverse proxy tương ứng.
 
-**CA-signed certificate**: Certificate được ký bởi CA tin cậy (Let's Encrypt, DigiCert...) — trình duyệt tin tưởng mặc định. Dùng cho production.
+```
+Internet → [LoadBalancer/NodePort] → Ingress Controller Pod → Service → Pod
+                                     (nginx, traefik, haproxy...)
+```
 
-### Tạo self-signed certificate bằng openssl
+Kubernetes **không có** Ingress Controller built-in — bạn phải cài thêm. Phổ biến nhất:
+
+| Controller | Cài đặt | Ghi chú |
+|-----------|---------|---------|
+| **NGINX Ingress** | `helm install ingress-nginx ingress-nginx/ingress-nginx` | Phổ biến nhất, dùng trong CKS |
+| Traefik | `helm install traefik traefik/traefik` | Tích hợp tốt với Docker |
+| HAProxy | `helm install haproxy haproxytech/kubernetes-ingress` | Hiệu năng cao |
+
+### IngressClass là gì?
+
+**IngressClass** là resource liên kết Ingress resource với Ingress Controller cụ thể. Khi có nhiều controller trong cluster, IngressClass xác định controller nào xử lý Ingress nào.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: nginx
+spec:
+  controller: k8s.io/ingress-nginx  # Tên controller
+```
+
+Trong Ingress resource, khai báo `ingressClassName` để chỉ định:
+
+```yaml
+spec:
+  ingressClassName: nginx   # Phải khớp với tên IngressClass
+  tls: [...]
+  rules: [...]
+```
+
+> **Lưu ý:** Từ Kubernetes 1.18+, `ingressClassName` là cách chuẩn. Annotation cũ `kubernetes.io/ingress.class` vẫn hoạt động nhưng deprecated.
+
+### TLS Termination tại Ingress
+
+```
+Client ──[HTTPS port 443]──► Ingress Controller ──[HTTP port 80]──► Service ──► Pod
+                              (decrypt TLS ở đây)
+```
+
+Ingress Controller:
+1. Nhận HTTPS request từ client
+2. Dùng private key trong TLS Secret để decrypt
+3. Gửi certificate cho client để xác thực
+4. Forward request dưới dạng HTTP thuần đến backend
+
+Backend Pod **không cần** biết về TLS — đơn giản hóa ứng dụng.
+
+### Luồng đầy đủ khi request đến
+
+```
+1. Client gửi HTTPS request đến domain app.tls-lab.local
+2. DNS resolve → IP của LoadBalancer/NodePort của Ingress Controller
+3. Ingress Controller nhận request trên port 443
+4. Tìm Ingress resource có host=app.tls-lab.local và ingressClassName=nginx
+5. Lấy TLS Secret tls-secret để decrypt
+6. Forward HTTP request đến Service nginx-service:80
+7. Service forward đến Pod
+```
+
+### TLS Secret
 
 ```bash
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout tls.key \    # Output: private key
-  -out tls.crt \       # Output: certificate
-  -subj "/CN=myapp.example.com/O=myorg"
-#          ↑ Common Name = domain name
-```
-
-Giải thích các flag:
-- `-x509`: Tạo self-signed cert (không phải CSR)
-- `-nodes`: Không mã hóa private key bằng passphrase
-- `-days 365`: Cert có hiệu lực 365 ngày
-- `-newkey rsa:2048`: Tạo RSA key 2048-bit mới
-
-### Kubernetes TLS Secret
-
-Kubernetes có Secret type đặc biệt cho TLS:
-
-```bash
-kubectl create secret tls <tên-secret> \
+kubectl create secret tls <tên> \
   --cert=tls.crt \
   --key=tls.key \
   -n <namespace>
 ```
 
-Secret này có `type: kubernetes.io/tls` và chứa 2 key: `tls.crt` và `tls.key`.
-
-### Cấu hình Ingress với TLS
-
-```yaml
-spec:
-  tls:
-  - hosts:
-    - myapp.example.com    # Phải khớp với host trong spec.rules
-    secretName: myapp-tls  # Tên TLS Secret
-  rules:
-  - host: myapp.example.com
-    http:
-      paths: [...]
-```
-
-> **Lưu ý:** `hosts` trong `spec.tls` phải khớp với `host` trong `spec.rules` để TLS hoạt động đúng.
+Secret có `type: kubernetes.io/tls` với 2 key: `tls.crt` và `tls.key`.
 
 ---
 
 ## Bối cảnh
 
-Bạn là kỹ sư bảo mật tại một công ty fintech. Nhóm DevOps vừa triển khai một ứng dụng web trong namespace `tls-lab`, nhưng hiện tại chỉ có HTTP. Yêu cầu bảo mật nội bộ bắt buộc tất cả traffic phải được mã hóa qua HTTPS.
+Bạn là kỹ sư bảo mật tại một công ty fintech. Ứng dụng web đang chạy trong namespace `tls-lab` chỉ có HTTP. Yêu cầu bảo mật bắt buộc tất cả traffic phải được mã hóa qua HTTPS.
 
-Nhiệm vụ của bạn là:
-1. Tạo self-signed TLS certificate cho domain `app.tls-lab.local`
-2. Lưu certificate vào Kubernetes Secret kiểu `kubernetes.io/tls`
-3. Cấu hình Ingress với TLS termination sử dụng Secret đó
-4. Xác minh Ingress có cấu hình TLS đúng
+Nhiệm vụ của bạn là thiết lập toàn bộ stack Ingress TLS từ đầu:
+1. Cài đặt NGINX Ingress Controller
+2. Tạo TLS certificate và Secret
+3. Cấu hình Ingress với đúng `ingressClassName` và TLS
+4. Xác minh HTTPS hoạt động thực sự
 
 ---
 
@@ -108,7 +138,8 @@ Nhiệm vụ của bạn là:
 - Kubernetes cluster >= 1.29
 - `kubectl` đã được cấu hình và kết nối đến cluster
 - `openssl` đã được cài đặt
-- Ingress controller đã được cài đặt trong cluster (ví dụ: nginx-ingress)
+- `helm` đã được cài đặt (để cài Ingress Controller)
+- Quyền tạo namespace, Deployment, Service, Ingress, IngressClass
 
 Chạy script khởi tạo môi trường:
 
@@ -120,61 +151,111 @@ bash setup.sh
 
 ## Các bước thực hiện
 
-### Bước 1: Kiểm tra môi trường
+### Bước 1: Kiểm tra Ingress Controller đã có chưa
 
 ```bash
-# Xác nhận namespace và deployment đã được tạo
-kubectl get all -n tls-lab
+# Kiểm tra xem đã có Ingress Controller nào chưa
+kubectl get pods --all-namespaces | grep -i ingress
 
-# Kiểm tra openssl có sẵn
-openssl version
+# Kiểm tra IngressClass có sẵn
+kubectl get ingressclass
+
+# Kiểm tra namespace ingress-nginx
+kubectl get namespace ingress-nginx 2>/dev/null || echo "Chưa có ingress-nginx namespace"
 ```
 
-### Bước 2: Tạo self-signed TLS certificate
+---
 
-Dùng `openssl` để tạo private key và self-signed certificate:
+### Bước 2: Cài đặt NGINX Ingress Controller (nếu chưa có)
 
 ```bash
-# Tạo thư mục làm việc
+# Thêm Helm repo
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+# Cài đặt NGINX Ingress Controller
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace \
+  --set controller.service.type=NodePort \
+  --set controller.service.nodePorts.http=30080 \
+  --set controller.service.nodePorts.https=30443
+
+# Chờ controller sẵn sàng
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
+```
+
+Xác minh:
+```bash
+# Controller pod phải Running
+kubectl get pods -n ingress-nginx
+
+# IngressClass 'nginx' phải tồn tại
+kubectl get ingressclass
+# NAME    CONTROLLER             PARAMETERS   AGE
+# nginx   k8s.io/ingress-nginx   <none>       1m
+```
+
+---
+
+### Bước 3: Hiểu IngressClass vừa được tạo
+
+```bash
+# Xem chi tiết IngressClass
+kubectl describe ingressclass nginx
+
+# Xem YAML
+kubectl get ingressclass nginx -o yaml
+```
+
+Output quan trọng:
+```yaml
+spec:
+  controller: k8s.io/ingress-nginx  # Controller nào xử lý
+```
+
+Khi tạo Ingress resource với `ingressClassName: nginx`, NGINX Ingress Controller sẽ đọc và xử lý Ingress đó.
+
+---
+
+### Bước 4: Tạo self-signed TLS certificate
+
+```bash
 mkdir -p /tmp/tls-lab
 
-# Tạo private key và certificate trong một lệnh
+# Tạo private key và self-signed certificate
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout /tmp/tls-lab/tls.key \
   -out /tmp/tls-lab/tls.crt \
   -subj "/CN=app.tls-lab.local/O=tls-lab"
+
+# Xác minh certificate
+openssl x509 -in /tmp/tls-lab/tls.crt -text -noout | \
+  grep -E "Subject:|Not After|Issuer"
 ```
 
-Xác nhận file đã được tạo:
+---
 
-```bash
-ls -la /tmp/tls-lab/
-openssl x509 -in /tmp/tls-lab/tls.crt -text -noout | grep -E "Subject:|Not After"
-```
-
-### Bước 3: Tạo Kubernetes Secret kiểu TLS
-
-Dùng `kubectl create secret tls` để tạo Secret từ certificate:
+### Bước 5: Tạo TLS Secret trong namespace tls-lab
 
 ```bash
 kubectl create secret tls tls-secret \
   --cert=/tmp/tls-lab/tls.crt \
   --key=/tmp/tls-lab/tls.key \
   -n tls-lab
-```
 
-Xác nhận Secret đã được tạo với đúng type:
-
-```bash
+# Xác minh type là kubernetes.io/tls
 kubectl get secret tls-secret -n tls-lab
-kubectl describe secret tls-secret -n tls-lab
+# NAME         TYPE                DATA   AGE
+# tls-secret   kubernetes.io/tls   2      5s
 ```
 
-Output mong đợi: `Type: kubernetes.io/tls`
+---
 
-### Bước 4: Tạo Ingress với TLS
-
-Tạo Ingress resource có cấu hình TLS:
+### Bước 6: Tạo Ingress resource với TLS và ingressClassName
 
 ```bash
 kubectl apply -f - <<EOF
@@ -186,10 +267,11 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
+  ingressClassName: nginx        # Quan trọng: phải khớp với IngressClass
   tls:
   - hosts:
-    - app.tls-lab.local
-    secretName: tls-secret
+    - app.tls-lab.local          # Phải khớp với host trong rules
+    secretName: tls-secret       # TLS Secret vừa tạo
   rules:
   - host: app.tls-lab.local
     http:
@@ -204,20 +286,88 @@ spec:
 EOF
 ```
 
-### Bước 5: Xác minh cấu hình
-
+Xác minh Ingress đã được nhận bởi controller:
 ```bash
-# Kiểm tra Ingress đã được tạo
 kubectl get ingress tls-ingress -n tls-lab
+# NAME          CLASS   HOSTS               ADDRESS        PORTS     AGE
+# tls-ingress   nginx   app.tls-lab.local   <node-ip>      80, 443   10s
 
-# Xem chi tiết cấu hình TLS
+# Xem chi tiết
 kubectl describe ingress tls-ingress -n tls-lab
-
-# Xem spec.tls trong YAML
-kubectl get ingress tls-ingress -n tls-lab -o jsonpath='{.spec.tls}' | python3 -m json.tool
+# TLS:
+#   tls-secret terminates app.tls-lab.local
 ```
 
-### Bước 6: Kiểm tra kết quả
+> **Lưu ý:** Nếu cột `ADDRESS` trống sau 1-2 phút, kiểm tra Ingress Controller đang chạy không.
+
+---
+
+### Bước 7: Test HTTPS thực sự
+
+```bash
+# Lấy NodePort của Ingress Controller
+HTTPS_PORT=$(kubectl get svc ingress-nginx-controller -n ingress-nginx \
+  -o jsonpath='{.spec.ports[?(@.name=="https")].nodePort}')
+echo "HTTPS NodePort: $HTTPS_PORT"
+
+# Lấy IP của node
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+echo "Node IP: $NODE_IP"
+
+# Test HTTPS với curl (-k để bỏ qua self-signed cert warning)
+curl -k -H "Host: app.tls-lab.local" https://$NODE_IP:$HTTPS_PORT/
+# Mong đợi: HTML của nginx
+
+# Xem certificate được trả về
+curl -k -v -H "Host: app.tls-lab.local" https://$NODE_IP:$HTTPS_PORT/ 2>&1 | \
+  grep -E "subject:|issuer:|SSL|TLS"
+```
+
+---
+
+### Bước 8: So sánh — Ingress không có ingressClassName
+
+Thử tạo Ingress **không có** `ingressClassName`:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: no-class-ingress
+  namespace: tls-lab
+spec:
+  # ingressClassName bị bỏ — không có controller nào nhận
+  tls:
+  - hosts:
+    - app2.tls-lab.local
+    secretName: tls-secret
+  rules:
+  - host: app2.tls-lab.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx-service
+            port:
+              number: 80
+EOF
+
+# Xem trạng thái — ADDRESS sẽ trống mãi
+kubectl get ingress no-class-ingress -n tls-lab
+# NAME               CLASS    HOSTS                ADDRESS   PORTS     AGE
+# no-class-ingress   <none>   app2.tls-lab.local             80, 443   10s
+#                    ↑ Không có class → không controller nào xử lý
+
+# Xóa ingress này
+kubectl delete ingress no-class-ingress -n tls-lab
+```
+
+---
+
+### Bước 9: Chạy verify script
 
 ```bash
 bash verify.sh
@@ -227,78 +377,84 @@ bash verify.sh
 
 ## Tiêu chí kiểm tra
 
+- [ ] NGINX Ingress Controller đang chạy trong namespace `ingress-nginx`
+- [ ] IngressClass `nginx` tồn tại trong cluster
 - [ ] Secret `tls-secret` tồn tại trong namespace `tls-lab` với type `kubernetes.io/tls`
-- [ ] Ingress `tls-ingress` tồn tại trong namespace `tls-lab`
-- [ ] Ingress `tls-ingress` có cấu hình TLS (spec.tls không rỗng)
+- [ ] Ingress `tls-ingress` tồn tại với `ingressClassName: nginx` và cấu hình TLS
 
 ---
 
 ## Gợi ý
 
 <details>
-<summary>Gợi ý 1: Cú pháp openssl tạo self-signed cert</summary>
+<summary>Gợi ý 1: Tại sao Ingress không hoạt động dù đã tạo?</summary>
 
-Lệnh `openssl req -x509` tạo self-signed certificate trực tiếp (không cần CA):
+Kiểm tra theo thứ tự:
 
 ```bash
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout tls.key \
-  -out tls.crt \
-  -subj "/CN=<domain>/O=<org>"
-```
+# 1. Ingress Controller có đang chạy không?
+kubectl get pods -n ingress-nginx
 
-- `-x509`: tạo self-signed certificate (không phải CSR)
-- `-nodes`: không mã hóa private key bằng passphrase
-- `-days 365`: certificate có hiệu lực 365 ngày
-- `-newkey rsa:2048`: tạo RSA key 2048-bit mới
-- `-subj`: thông tin subject, `/CN=` là Common Name (domain)
+# 2. IngressClass có tồn tại không?
+kubectl get ingressclass
+
+# 3. Ingress resource có đúng ingressClassName không?
+kubectl get ingress -n tls-lab -o yaml | grep ingressClassName
+
+# 4. Ingress có ADDRESS không? (nếu trống = controller chưa nhận)
+kubectl get ingress -n tls-lab
+
+# 5. Logs của Ingress Controller
+kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller --tail=50
+```
 
 </details>
 
 <details>
-<summary>Gợi ý 2: Tạo TLS Secret bằng kubectl</summary>
+<summary>Gợi ý 2: Cài Ingress Controller không dùng Helm</summary>
 
-Có hai cách tạo TLS Secret:
-
-**Cách 1 – kubectl create secret tls (khuyến nghị):**
 ```bash
-kubectl create secret tls <tên-secret> \
-  --cert=<đường-dẫn-tls.crt> \
-  --key=<đường-dẫn-tls.key> \
-  -n <namespace>
-```
+# Cài bằng manifest trực tiếp (không cần Helm)
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/baremetal/deploy.yaml
 
-**Cách 2 – kubectl create secret generic với base64:**
-```bash
-kubectl create secret generic <tên-secret> \
-  --from-file=tls.crt=<đường-dẫn-tls.crt> \
-  --from-file=tls.key=<đường-dẫn-tls.key> \
-  --type=kubernetes.io/tls \
-  -n <namespace>
+# Chờ sẵn sàng
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
 ```
-
-Cách 1 tự động set `type: kubernetes.io/tls` và validate format.
 
 </details>
 
 <details>
-<summary>Gợi ý 3: Cấu trúc spec.tls trong Ingress</summary>
+<summary>Gợi ý 3: Default IngressClass</summary>
 
-Phần `spec.tls` trong Ingress có cấu trúc:
+Nếu muốn Ingress Controller xử lý tất cả Ingress không có `ingressClassName`, đặt annotation `ingressclass.kubernetes.io/is-default-class: "true"`:
 
-```yaml
-spec:
-  tls:
-  - hosts:
-    - <domain>          # phải khớp với host trong spec.rules
-    secretName: <tên-secret>   # Secret kiểu kubernetes.io/tls
-  rules:
-  - host: <domain>
-    http:
-      paths: [...]
+```bash
+kubectl annotate ingressclass nginx \
+  ingressclass.kubernetes.io/is-default-class=true
 ```
 
-Lưu ý: `hosts` trong `spec.tls` phải khớp với `host` trong `spec.rules` để TLS hoạt động đúng.
+Sau đó Ingress không có `ingressClassName` sẽ tự động dùng controller này.
+
+</details>
+
+<details>
+<summary>Gợi ý 4: Test HTTPS với /etc/hosts</summary>
+
+Để test bằng domain thực thay vì `-H "Host:"`:
+
+```bash
+# Thêm vào /etc/hosts
+echo "$NODE_IP app.tls-lab.local" | sudo tee -a /etc/hosts
+
+# Test bằng domain
+curl -k https://app.tls-lab.local:$HTTPS_PORT/
+
+# Xóa sau khi test
+sudo sed -i '/app.tls-lab.local/d' /etc/hosts
+```
 
 </details>
 
@@ -317,46 +473,35 @@ Xem file [solution/solution.md](solution/solution.md) để có lệnh đầy đ
 
 ## Giải thích
 
-### TLS Termination tại Ingress là gì?
+### Tại sao cần đủ 3 thành phần?
 
-Khi Ingress controller nhận HTTPS request từ client, nó:
-1. **Giải mã (decrypt)** traffic TLS bằng private key trong Secret
-2. **Chuyển tiếp** request dưới dạng HTTP thuần đến backend Service
-3. Backend Service và Pod không cần biết về TLS
+| Thành phần | Vai trò | Nếu thiếu |
+|-----------|---------|-----------|
+| **Ingress Controller** | Pod thực sự nhận và xử lý traffic | Traffic không đến được backend |
+| **IngressClass** | Liên kết Controller với Ingress resource | Controller không biết Ingress nào thuộc về nó |
+| **Ingress resource** | Định nghĩa routing rules và TLS | Không có rules để route |
 
-Đây gọi là **TLS termination** — TLS kết thúc tại Ingress, không phải tại Pod.
+### Tại sao `ingressClassName` quan trọng?
 
-```
-Client --[HTTPS]--> Ingress Controller --[HTTP]--> Service --> Pod
-                    (TLS terminated here)
-```
+Trong cluster có nhiều Ingress Controller (nginx + traefik chẳng hạn), `ingressClassName` xác định controller nào xử lý Ingress nào. Nếu không khai báo và không có default class, Ingress bị bỏ qua hoàn toàn.
 
-### Tại sao dùng Secret kiểu kubernetes.io/tls?
+### TLS Secret và Ingress Controller
 
-Kubernetes có type Secret đặc biệt cho TLS:
-- `tls.crt`: certificate (public key + metadata)
-- `tls.key`: private key
+Ingress Controller đọc TLS Secret để:
+1. Load private key vào memory
+2. Cấu hình TLS listener cho domain tương ứng
+3. Khi client kết nối, dùng private key để TLS handshake
 
-Type `kubernetes.io/tls` giúp Kubernetes và Ingress controller nhận biết đây là TLS credential và xử lý đúng cách.
+Secret phải ở **cùng namespace** với Ingress resource.
 
-### Self-signed vs CA-signed Certificate
+### Trong CKS Exam
 
-| Loại | Dùng khi nào | Trình duyệt tin tưởng? |
-|------|-------------|----------------------|
-| Self-signed | Lab, internal testing | Không (cần thêm vào trust store) |
-| CA-signed (Let's Encrypt, v.v.) | Production | Có |
-| Internal CA | Enterprise internal | Có (nếu CA được deploy) |
+Bạn thường được cấp cluster đã có Ingress Controller sẵn. Nhiệm vụ thường là:
+1. Tạo TLS Secret từ cert/key cho sẵn
+2. Tạo Ingress với đúng `ingressClassName`, `spec.tls`, và `spec.rules`
+3. Xác minh Ingress có ADDRESS và TLS hoạt động
 
-Trong kỳ thi CKS, self-signed certificate là đủ để kiểm tra cấu hình TLS.
-
-### Ingress TLS và CKS Exam
-
-Trong kỳ thi CKS, bạn có thể được yêu cầu:
-- Tạo TLS Secret từ cert/key cho sẵn
-- Cấu hình Ingress với TLS section
-- Xác minh Ingress đang dùng đúng Secret
-
-Lệnh quan trọng cần nhớ:
+Lệnh quan trọng nhất:
 ```bash
 kubectl create secret tls <name> --cert=tls.crt --key=tls.key -n <ns>
 ```
@@ -365,8 +510,8 @@ kubectl create secret tls <name> --cert=tls.crt --key=tls.key -n <ns>
 
 ## Tham khảo
 
-- [Kubernetes Ingress TLS](https://kubernetes.io/docs/concepts/services-networking/ingress/#tls)
+- [Kubernetes Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/)
+- [IngressClass](https://kubernetes.io/docs/concepts/services-networking/ingress/#ingress-class)
+- [NGINX Ingress Controller](https://kubernetes.github.io/ingress-nginx/)
 - [TLS Secrets](https://kubernetes.io/docs/concepts/configuration/secret/#tls-secrets)
-- [NGINX Ingress Controller – TLS/HTTPS](https://kubernetes.github.io/ingress-nginx/user-guide/tls/)
-- [openssl req man page](https://www.openssl.org/docs/man1.1.1/man1/req.html)
 - [CKS Exam Curriculum – Cluster Setup](https://training.linuxfoundation.org/certification/certified-kubernetes-security-specialist/)
