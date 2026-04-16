@@ -68,24 +68,21 @@ echo "[OK] Secret 'sample-secret' đã được tạo trong namespace 'audit-lab
 echo ""
 echo "Tạo audit policy template tại /tmp/audit-policy.yaml..."
 
-cat > /tmp/audit-policy.yaml <<'POLICY'
+# Dùng tee để tránh vấn đề heredoc với set -e
+tee /tmp/audit-policy.yaml > /dev/null << 'AUDIT_POLICY'
 apiVersion: audit.k8s.io/v1
 kind: Policy
 rules:
-  # Ghi lại đầy đủ request và response cho Secret
   - level: RequestResponse
     resources:
     - group: ""
       resources: ["secrets"]
-
-  # Bỏ qua các request từ system components không cần thiết
   - level: None
     users: ["system:kube-proxy"]
     verbs: ["watch"]
     resources:
     - group: ""
       resources: ["endpoints", "services", "services/status"]
-
   - level: None
     users: ["system:unsecured"]
     namespaces: ["kube-system"]
@@ -93,26 +90,28 @@ rules:
     resources:
     - group: ""
       resources: ["configmaps"]
-
   - level: None
     users: ["kubelet"]
     verbs: ["get"]
     resources:
     - group: ""
       resources: ["nodes", "nodes/status"]
-
   - level: None
     userGroups: ["system:nodes"]
     verbs: ["get"]
     resources:
     - group: ""
       resources: ["nodes", "nodes/status"]
-
-  # Ghi Metadata cho tất cả thao tác còn lại
   - level: Metadata
     omitStages:
     - "RequestReceived"
-POLICY
+AUDIT_POLICY
+
+# Xác minh file được tạo đúng
+if [ "$(wc -l < /tmp/audit-policy.yaml)" -lt 5 ]; then
+  echo "[ERROR] File /tmp/audit-policy.yaml bị lỗi khi tạo."
+  exit 1
+fi
 
 echo "[OK] Audit policy template đã được tạo tại /tmp/audit-policy.yaml."
 
