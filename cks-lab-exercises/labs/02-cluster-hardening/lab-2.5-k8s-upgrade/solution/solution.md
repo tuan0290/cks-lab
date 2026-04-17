@@ -1,106 +1,157 @@
-# Giải pháp mẫu – Lab 2.5: Kubernetes Cluster Upgrade
+# Giải pháp mẫu – Lab 2.5: Kubernetes Cluster Upgrade (v1.31 → v1.32)
 
-> **Lưu ý:** Chỉ đọc sau khi đã tự thử thực hành.
+> Tham khảo chính thức:
+> - https://v1-32.docs.kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/
+> - https://v1-32.docs.kubernetes.io/docs/tasks/administer-cluster/kubeadm/upgrading-linux-nodes/
 
 ---
 
-## Quy trình upgrade đầy đủ (Debian/Ubuntu)
+## Upgrade Control-Plane Node
 
-### Bước 1: Xác định phiên bản target
-
-```bash
-# Trên control-plane node
-sudo kubeadm upgrade plan
-
-# Xem package có sẵn
-apt-cache madison kubeadm | head -5
-# Ví dụ output:
-#   kubeadm | 1.29.3-1.1 | https://pkgs.k8s.io/...
-#   kubeadm | 1.29.2-1.1 | https://pkgs.k8s.io/...
-```
-
-### Bước 2: Upgrade control-plane
+### 1. Đổi repository sang v1.32
 
 ```bash
 # SSH vào control-plane node
 ssh user@control-plane-ip
 
-# 2a. Upgrade kubeadm
-sudo apt-mark unhold kubeadm
+# Debian/Ubuntu: đổi repository
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /" \
+  | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
 sudo apt-get update
-sudo apt-get install -y kubeadm=1.29.3-1.1
+
+# Tìm patch version mới nhất
+sudo apt-cache madison kubeadm
+# → Ví dụ: 1.32.3-1.1
+```
+
+### 2. Upgrade kubeadm
+
+```bash
+# Debian/Ubuntu (thay x bằng patch version)
+sudo apt-mark unhold kubeadm && \
+sudo apt-get update && \
+sudo apt-get install -y kubeadm='1.32.x-*' && \
 sudo apt-mark hold kubeadm
+
+# RHEL/CentOS
+sudo yum install -y kubeadm-'1.32.x-*' --disableexcludes=kubernetes
 
 # Xác minh
 kubeadm version
-
-# 2b. Apply upgrade
-sudo kubeadm upgrade apply v1.29.3
-# Nhập 'y' khi được hỏi
-
-# 2c. Drain control-plane (từ máy có kubectl)
-kubectl drain <control-plane-name> \
-  --ignore-daemonsets \
-  --delete-emptydir-data
-
-# 2d. Upgrade kubelet + kubectl
-sudo apt-mark unhold kubelet kubectl
-sudo apt-get update
-sudo apt-get install -y kubelet=1.29.3-1.1 kubectl=1.29.3-1.1
-sudo apt-mark hold kubelet kubectl
-
-# Restart kubelet
-sudo systemctl daemon-reload
-sudo systemctl restart kubelet
-
-# 2e. Uncordon
-kubectl uncordon <control-plane-name>
-
-# Xác minh
-kubectl get nodes
 ```
 
-### Bước 3: Upgrade từng worker node
+### 3. Xem kế hoạch upgrade
 
 ```bash
-# Drain worker node (từ máy có kubectl)
-kubectl drain <worker-node-name> \
-  --ignore-daemonsets \
-  --delete-emptydir-data
+sudo kubeadm upgrade plan
+```
 
-# SSH vào worker node
-ssh user@worker-node-ip
+### 4. Apply upgrade (chỉ primary control-plane)
 
-# Upgrade kubeadm
-sudo apt-mark unhold kubeadm
-sudo apt-get update
-sudo apt-get install -y kubeadm=1.29.3-1.1
-sudo apt-mark hold kubeadm
+```bash
+sudo kubeadm upgrade apply v1.32.x
+# Nhập 'y' khi được hỏi
+# Output thành công: [upgrade/successful] SUCCESS! Your cluster was upgraded to "v1.32.x"
+```
 
-# Upgrade node config
-sudo kubeadm upgrade node
+> **Additional control-plane nodes** dùng `sudo kubeadm upgrade node` thay vì `upgrade apply`.
 
-# Upgrade kubelet + kubectl
-sudo apt-mark unhold kubelet kubectl
-sudo apt-get update
-sudo apt-get install -y kubelet=1.29.3-1.1 kubectl=1.29.3-1.1
+### 5. Drain control-plane node
+
+```bash
+# Chạy từ máy có kubectl
+kubectl drain <control-plane-name> --ignore-daemonsets
+```
+
+### 6. Upgrade kubelet và kubectl
+
+```bash
+# Debian/Ubuntu
+sudo apt-mark unhold kubelet kubectl && \
+sudo apt-get update && \
+sudo apt-get install -y kubelet='1.32.x-*' kubectl='1.32.x-*' && \
 sudo apt-mark hold kubelet kubectl
+
+# RHEL/CentOS
+sudo yum install -y kubelet-'1.32.x-*' kubectl-'1.32.x-*' --disableexcludes=kubernetes
 
 # Restart kubelet
 sudo systemctl daemon-reload
 sudo systemctl restart kubelet
+```
 
-# Uncordon (từ máy có kubectl)
+### 7. Uncordon control-plane
+
+```bash
+kubectl uncordon <control-plane-name>
+kubectl get nodes  # Xác minh Ready + phiên bản mới
+```
+
+---
+
+## Upgrade Worker Node
+
+### 1. Drain worker node (từ control-plane)
+
+```bash
+kubectl drain <worker-node-name> --ignore-daemonsets
+```
+
+### 2. SSH vào worker node và đổi repository
+
+```bash
+ssh user@worker-node-ip
+
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /" \
+  | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+sudo apt-get update
+```
+
+### 3. Upgrade kubeadm
+
+```bash
+sudo apt-mark unhold kubeadm && \
+sudo apt-get update && \
+sudo apt-get install -y kubeadm='1.32.x-*' && \
+sudo apt-mark hold kubeadm
+```
+
+### 4. Upgrade node configuration
+
+```bash
+# Worker node dùng "upgrade node" (KHÔNG phải "upgrade apply")
+sudo kubeadm upgrade node
+```
+
+### 5. Upgrade kubelet và kubectl
+
+```bash
+sudo apt-mark unhold kubelet kubectl && \
+sudo apt-get update && \
+sudo apt-get install -y kubelet='1.32.x-*' kubectl='1.32.x-*' && \
+sudo apt-mark hold kubelet kubectl
+
+sudo systemctl daemon-reload
+sudo systemctl restart kubelet
+```
+
+### 6. Uncordon worker node (từ control-plane)
+
+```bash
 kubectl uncordon <worker-node-name>
 ```
 
-### Bước 4: Xác minh
+---
+
+## Xác minh
 
 ```bash
-# Tất cả node phải Ready với phiên bản mới
+# Tất cả node Ready với phiên bản mới
 kubectl get nodes
 
-# Tất cả pod kube-system phải Running
+# Tất cả pod kube-system Running
 kubectl get pods -n kube-system
 
 # Phiên bản API server
@@ -109,53 +160,16 @@ kubectl version
 
 ---
 
-## Sự khác biệt giữa control-plane và worker node
+## Điểm khác biệt quan trọng
 
-| Bước | Control-plane | Worker node |
-|------|--------------|-------------|
-| Upgrade kubeadm | `apt install kubeadm=X` | `apt install kubeadm=X` |
-| Upgrade components | `kubeadm upgrade apply vX.Y.Z` | `kubeadm upgrade node` |
-| Upgrade kubelet | `apt install kubelet=X kubectl=X` | `apt install kubelet=X kubectl=X` |
-
-**Lưu ý quan trọng:**
-- Control-plane dùng `kubeadm upgrade apply` — upgrade toàn bộ control-plane components
-- Worker node dùng `kubeadm upgrade node` — chỉ upgrade node configuration
-
----
-
-## Xử lý lỗi thường gặp
-
-### Lỗi: "node has pods that cannot be evicted"
-
-```bash
-# Xem pod nào đang block
-kubectl get pods --all-namespaces -o wide | grep <node-name>
-
-# Force drain
-kubectl drain <node> \
-  --ignore-daemonsets \
-  --delete-emptydir-data \
-  --force
-```
-
-### Lỗi: kubelet không start sau upgrade
-
-```bash
-# Xem logs
-sudo journalctl -u kubelet -f
-
-# Thường do config không tương thích — reset config
-sudo kubeadm upgrade node --certificate-renewal=false
-sudo systemctl restart kubelet
-```
-
-### Lỗi: "unable to upgrade connection: pod does not exist"
-
-Đây là lỗi tạm thời khi pod đang restart sau upgrade. Chờ 1-2 phút và thử lại.
+| | Control-plane (primary) | Control-plane (additional) | Worker node |
+|---|---|---|---|
+| Upgrade components | `kubeadm upgrade apply vX.Y.Z` | `kubeadm upgrade node` | `kubeadm upgrade node` |
+| Thứ tự drain | **Sau** upgrade components | **Sau** upgrade components | **Trước** upgrade components |
 
 ---
 
 ## Tham khảo
 
-- [kubeadm upgrade](https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/)
-- [Kubernetes CVE Feed](https://kubernetes.io/docs/reference/issues-security/official-cve-feed/)
+- [kubeadm upgrade (v1.32)](https://v1-32.docs.kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/)
+- [Upgrading Linux nodes (v1.32)](https://v1-32.docs.kubernetes.io/docs/tasks/administer-cluster/kubeadm/upgrading-linux-nodes/)
