@@ -46,22 +46,30 @@ echo "[OK] Namespace 'apparmor-lab' đã được tạo."
 echo ""
 echo "Tạo AppArmor profile file tại /tmp/k8s-deny-write..."
 
-cat > /tmp/k8s-deny-write <<'PROFILE'
+tee /tmp/k8s-deny-write > /dev/null << 'APPARMOR_PROFILE'
 #include <tunables/global>
 
 profile k8s-deny-write flags=(attach_disconnected) {
   #include <abstractions/base>
 
-  # Cho phép đọc mọi file
+  # Cho phep doc moi file
   file,
 
-  # Chặn tất cả thao tác ghi và append file
+  # Chan tat ca thao tac ghi va append file
   deny /** w,
   deny /** a,
 }
-PROFILE
+APPARMOR_PROFILE
+
+# Xác minh file được tạo đúng
+if [ ! -s /tmp/k8s-deny-write ]; then
+  echo "[ERROR] File /tmp/k8s-deny-write bị lỗi khi tạo."
+  exit 1
+fi
 
 echo "[OK] AppArmor profile đã được tạo tại /tmp/k8s-deny-write."
+echo "     Nội dung:"
+cat /tmp/k8s-deny-write
 
 # --- Hướng dẫn load profile ---
 
