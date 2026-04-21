@@ -25,15 +25,22 @@ fi
 echo "[OK] kubectl và cluster kết nối thành công."
 
 if ! command -v trivy &>/dev/null; then
-  echo "[ERROR] trivy không tìm thấy."
-  echo "        Cài đặt trivy: https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
+  echo "[WARN] trivy không tìm thấy. Đang tự động cài đặt..."
   echo ""
-  echo "        Ví dụ cài đặt trên Linux:"
-  echo "          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin"
-  exit 1
+  
+  # Tự động cài đặt trivy
+  curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+  
+  if ! command -v trivy &>/dev/null; then
+    echo "[ERROR] Không thể cài đặt trivy tự động."
+    echo "        Vui lòng cài đặt thủ công: https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
+    exit 1
+  fi
+  
+  echo "[OK] trivy đã được cài đặt thành công."
+else
+  echo "[OK] trivy đã được cài đặt."
 fi
-
-echo "[OK] trivy đã được cài đặt."
 
 # --- Tạo namespace trivy-lab ---
 
