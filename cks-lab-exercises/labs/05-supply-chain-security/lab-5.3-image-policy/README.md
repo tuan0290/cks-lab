@@ -247,6 +247,62 @@ Xem file [solution/solution.md](solution/solution.md)
 
 ---
 
+## Bonus: Test với Mock Server (tùy chọn)
+
+Sau khi hoàn thành lab, bạn có thể chạy mock server để test cả chiều **allow** và **deny** thực sự.
+
+### Khởi động mock server
+
+Mở terminal thứ 2 trên control plane node:
+
+```bash
+# Chạy foreground (thấy log trực tiếp)
+bash mock-server.sh
+
+# Hoặc chạy background
+bash mock-server.sh start
+```
+
+Mock server lắng nghe tại `https://localhost:1234` và cho phép image từ:
+- `registry.k8s.io`
+- `docker.io/library`
+
+### Test allow/deny
+
+```bash
+# ALLOW — image từ registry được phép
+kubectl run allowed-pod --image=docker.io/library/nginx:alpine --restart=Never
+# → Pod được tạo thành công
+
+# DENY — image từ registry không được phép
+kubectl run denied-pod --image=gcr.io/google-containers/pause:3.1 --restart=Never
+# → Error: Images not from allowed registries
+
+# DENY — short image name không có registry prefix
+kubectl run denied-pod2 --image=nginx --restart=Never
+# → Error: Images not from allowed registries
+```
+
+### Xem log của mock server
+
+```bash
+tail -f /tmp/mock-image-policy-server.log
+```
+
+Output mẫu:
+```
+2026-04-24 [INFO]  ALLOW — images: ['docker.io/library/nginx:alpine']
+2026-04-24 [WARNING] DENY  — images not allowed: ['gcr.io/google-containers/pause:3.1']
+```
+
+### Dừng mock server
+
+```bash
+bash mock-server.sh stop
+```
+
+---
+
 ## Tham khảo
 
 - [Kubernetes ImagePolicyWebhook](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#imagepolicywebhook)

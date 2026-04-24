@@ -159,3 +159,63 @@ Kết quả: 6/6 tiêu chí đạt
 | `retryBackoff` | Thời gian chờ (ms) trước khi retry khi external service lỗi |
 | `defaultAllow: false` | Block tất cả Pod nếu external service không reachable |
 | `defaultAllow: true` | Cho phép tất cả Pod nếu external service không reachable (không an toàn) |
+
+
+---
+
+## Bonus: Chạy Mock Server để test Allow/Deny thực sự
+
+Lab chính chỉ yêu cầu cấu hình ImagePolicyWebhook — không cần external service thực sự. Nhưng nếu muốn test cả chiều allow/deny, dùng mock server:
+
+### Khởi động mock server
+
+```bash
+bash mock-server.sh start
+```
+
+Server lắng nghe tại `https://localhost:1234` với TLS (dùng cert đã tạo bởi setup.sh).
+
+### Test các trường hợp
+
+```bash
+# Test 1: Image từ registry được phép → ALLOW
+kubectl run test-allow --image=docker.io/library/nginx:alpine --restart=Never
+kubectl get pod test-allow  # → Running
+
+# Test 2: Image từ registry không được phép → DENY
+kubectl run test-deny --image=gcr.io/google-containers/pause:3.1 --restart=Never
+# → Error: Images not from allowed registries: ['gcr.io/google-containers/pause:3.1']
+
+# Test 3: Short image name (không có registry prefix) → DENY
+kubectl run test-short --image=nginx --restart=Never
+# → Error: Images not from allowed registries: ['nginx']
+```
+
+### Xem log của server
+
+```bash
+tail -f /tmp/mock-image-policy-server.log
+```
+
+Output:
+```
+2026-04-24 [INFO]  ALLOW — images: ['docker.io/library/nginx:alpine']
+2026-04-24 [WARNING] DENY  — images not allowed: ['gcr.io/google-containers/pause:3.1']
+2026-04-24 [WARNING] DENY  — images not allowed: ['nginx']
+```
+
+### Dừng server
+
+```bash
+bash mock-server.sh stop
+```
+
+### Cách hoạt động
+
+Mock server là một Python HTTP server với TLS:
+1. Nhận POST request từ kube-apiserver với body là `ImageReview` JSON
+2. Parse danh sách images từ `spec.containers[].image`
+3. Kiểm tra từng image có bắt đầu bằng allowed registry prefix không
+4. Trả về JSON response với `status.allowed=true/false`
+
+Format request/response theo [Kubernetes ImagePolicyWebhook spec](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#imagepolicywebhook).
