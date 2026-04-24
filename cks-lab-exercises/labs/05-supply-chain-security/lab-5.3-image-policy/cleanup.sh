@@ -1,52 +1,56 @@
 #!/bin/bash
-# Lab 5.3 – Image Policy Webhook
+# Lab 5.3 – ImagePolicyWebhook Setup
 # Script dọn dẹp môi trường lab
+
+POLICY_DIR="/etc/kubernetes/policywebhook"
+APISERVER_MANIFEST="/etc/kubernetes/manifests/kube-apiserver.yaml"
 
 echo "=========================================="
 echo " Lab 5.3 – Dọn dẹp môi trường"
 echo "=========================================="
 echo ""
 
-if ! command -v kubectl &>/dev/null; then
-  echo "[ERROR] kubectl không tìm thấy."
-  exit 1
-fi
+# --- Xóa ImagePolicyWebhook khỏi kube-apiserver ---
 
-if ! kubectl cluster-info &>/dev/null; then
-  echo "[ERROR] Không thể kết nối đến cluster."
-  exit 1
-fi
+if [ -f "$APISERVER_MANIFEST" ]; then
+  echo "Xóa ImagePolicyWebhook khỏi kube-apiserver manifest..."
 
-# --- Xóa Constraint ---
+  # Backup trước khi sửa
+  cp "$APISERVER_MANIFEST" "${APISERVER_MANIFEST}.bak-cleanup"
 
-echo "Xóa Constraint 'allowed-repos'..."
-kubectl delete k8sallowedrepos allowed-repos --ignore-not-found=true 2>/dev/null && \
-  echo "[OK] Constraint 'allowed-repos' đã được xóa." || \
-  echo "[SKIP] Constraint 'allowed-repos' không tồn tại hoặc CRD chưa được cài đặt."
+  # Xóa dòng enable-admission-plugins nếu chỉ có ImagePolicyWebhook
+  # Hoặc giữ lại NodeRestriction nếu có cả hai
+  if grep -q "ImagePolicyWebhook" "$APISERVER_MANIFEST"; then
+    sed -i 's/,ImagePolicyWebhook//g' "$APISERVER_MANIFEST"
+    sed -i 's/ImagePolicyWebhook,//g' "$APISERVER_MANIFEST"
+    sed -i '/--enable-admission-plugins=ImagePolicyWebhook/d' "$APISERVER_MANIFEST"
+    echo "[OK] Đã xóa ImagePolicyWebhook khỏi --enable-admission-plugins"
+  else
+    echo "[SKIP] ImagePolicyWebhook không có trong manifest."
+  fi
 
-# --- Xóa ConstraintTemplate ---
+  # Xóa --admission-control-config-file
+  if grep -q "admission-control-config-file" "$APISERVER_MANIFEST"; then
+    sed -i '/admission-control-config-file/d' "$APISERVER_MANIFEST"
+    echo "[OK] Đã xóa --admission-control-config-file"
+  else
+    echo "[SKIP] --admission-control-config-file không có trong manifest."
+  fi
 
-echo "Xóa ConstraintTemplate 'k8sallowedrepos'..."
-kubectl delete constrainttemplate k8sallowedrepos --ignore-not-found=true 2>/dev/null && \
-  echo "[OK] ConstraintTemplate 'k8sallowedrepos' đã được xóa." || \
-  echo "[SKIP] ConstraintTemplate 'k8sallowedrepos' không tồn tại."
-
-# --- Xóa namespace policy-lab ---
-
-echo "Xóa namespace policy-lab..."
-
-if kubectl get namespace policy-lab &>/dev/null; then
-  kubectl delete namespace policy-lab --ignore-not-found=true
-  echo "[OK] Namespace 'policy-lab' đã được xóa."
+  echo "     Backup lưu tại: ${APISERVER_MANIFEST}.bak-cleanup"
 else
-  echo "[SKIP] Namespace 'policy-lab' không tồn tại."
+  echo "[SKIP] Không tìm thấy $APISERVER_MANIFEST"
 fi
 
-# --- Xóa file tạm ---
+# --- Xóa thư mục policy ---
 
-if [ -f /tmp/allowed-repos-template.yaml ]; then
-  rm -f /tmp/allowed-repos-template.yaml
-  echo "[OK] File /tmp/allowed-repos-template.yaml đã được xóa."
+echo ""
+if [ -d "$POLICY_DIR" ]; then
+  echo "Xóa thư mục $POLICY_DIR..."
+  rm -rf "$POLICY_DIR"
+  echo "[OK] Thư mục $POLICY_DIR đã được xóa."
+else
+  echo "[SKIP] Thư mục $POLICY_DIR không tồn tại."
 fi
 
 echo ""
@@ -54,7 +58,6 @@ echo "=========================================="
 echo " Dọn dẹp hoàn tất!"
 echo "=========================================="
 echo ""
-echo "Lưu ý: OPA Gatekeeper vẫn còn trong cluster (nếu đã cài đặt)."
-echo "Để xóa Gatekeeper hoàn toàn:"
-echo "  kubectl delete -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.14/deploy/gatekeeper.yaml"
+echo "Lưu ý: kube-apiserver sẽ tự restart sau khi manifest thay đổi."
+echo "Kiểm tra: watch crictl ps"
 echo ""

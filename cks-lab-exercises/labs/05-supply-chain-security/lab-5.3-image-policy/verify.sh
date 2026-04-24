@@ -1,17 +1,18 @@
 #!/bin/bash
-# Lab 5.3 – Image Policy Webhook
+# Lab 5.3 – ImagePolicyWebhook Setup
 # Script kiểm tra kết quả bài lab
 
 PASS=0
 FAIL=0
 FAILED=0
 
+POLICY_DIR="/etc/kubernetes/policywebhook"
+APISERVER_MANIFEST="/etc/kubernetes/manifests/kube-apiserver.yaml"
+
 echo "=========================================="
 echo " Lab 5.3 – Kiểm tra kết quả"
 echo "=========================================="
 echo ""
-
-# --- Hàm tiện ích ---
 
 pass() {
   echo "[PASS] $1"
@@ -27,85 +28,113 @@ fail() {
   FAILED=1
 }
 
-# --- Kiểm tra kubectl ---
+# --- Tiêu chí 1: admission_config.json tồn tại và có allowTTL=100 ---
 
-if ! command -v kubectl &>/dev/null; then
-  echo "[ERROR] kubectl không tìm thấy. Không thể chạy kiểm tra."
-  exit 1
-fi
+echo "Kiểm tra tiêu chí 1: admission_config.json có allowTTL=100"
 
-if ! kubectl cluster-info &>/dev/null; then
-  echo "[ERROR] Không thể kết nối đến cluster."
-  exit 1
-fi
-
-# --- Tiêu chí 1: ConstraintTemplate K8sAllowedRepos tồn tại HOẶC ImagePolicyWebhook được cấu hình ---
-
-echo "Kiểm tra tiêu chí 1: ConstraintTemplate 'K8sAllowedRepos' tồn tại hoặc ImagePolicyWebhook được cấu hình"
-
-CONSTRAINT_TEMPLATE_EXISTS=0
-IMAGE_POLICY_EXISTS=0
-
-# Kiểm tra ConstraintTemplate
-if kubectl get constrainttemplate k8sallowedrepos &>/dev/null 2>&1; then
-  CONSTRAINT_TEMPLATE_EXISTS=1
-fi
-
-# Kiểm tra ImagePolicyWebhook (kiểm tra admission config trên apiserver)
-if kubectl get validatingwebhookconfiguration 2>/dev/null | grep -qi "image"; then
-  IMAGE_POLICY_EXISTS=1
-fi
-
-if [ "$CONSTRAINT_TEMPLATE_EXISTS" -eq 1 ]; then
-  pass "ConstraintTemplate 'k8sallowedrepos' tồn tại trong cluster"
-elif [ "$IMAGE_POLICY_EXISTS" -eq 1 ]; then
-  pass "ImagePolicyWebhook ValidatingWebhookConfiguration tồn tại trong cluster"
+if [ ! -f "$POLICY_DIR/admission_config.json" ]; then
+  fail "Không tìm thấy $POLICY_DIR/admission_config.json" \
+       "Chạy setup.sh để tạo file mẫu: bash setup.sh"
 else
-  fail "Không tìm thấy ConstraintTemplate 'k8sallowedrepos' hoặc ImagePolicyWebhook" \
-       "Apply ConstraintTemplate: kubectl apply -f /tmp/allowed-repos-template.yaml"
-fi
-
-echo ""
-
-# --- Tiêu chí 2: Constraint tồn tại ---
-
-echo "Kiểm tra tiêu chí 2: Constraint 'allowed-repos' tồn tại"
-
-CONSTRAINT_EXISTS=0
-
-# Kiểm tra K8sAllowedRepos constraint
-if kubectl get k8sallowedrepos allowed-repos &>/dev/null 2>&1; then
-  CONSTRAINT_EXISTS=1
-fi
-
-# Kiểm tra bất kỳ K8sAllowedRepos constraint nào
-if [ "$CONSTRAINT_EXISTS" -eq 0 ]; then
-  if kubectl get k8sallowedrepos &>/dev/null 2>&1; then
-    COUNT=$(kubectl get k8sallowedrepos --no-headers 2>/dev/null | wc -l)
-    if [ "$COUNT" -gt 0 ]; then
-      CONSTRAINT_EXISTS=1
-    fi
+  ALLOW_TTL=$(python3 -c "import json; d=json.load(open('$POLICY_DIR/admission_config.json')); print(d['plugins'][0]['configuration']['imagePolicy']['allowTTL'])" 2>/dev/null || echo "")
+  if [ "$ALLOW_TTL" = "100" ]; then
+    pass "admission_config.json có allowTTL=100"
+  else
+    fail "admission_config.json có allowTTL=$ALLOW_TTL (cần 100)" \
+         "Sửa allowTTL thành 100 trong $POLICY_DIR/admission_config.json"
   fi
 fi
 
-if [ "$CONSTRAINT_EXISTS" -eq 1 ]; then
-  pass "Constraint K8sAllowedRepos tồn tại trong cluster"
+echo ""
+
+# --- Tiêu chí 2: defaultAllow=false ---
+
+echo "Kiểm tra tiêu chí 2: admission_config.json có defaultAllow=false"
+
+if [ -f "$POLICY_DIR/admission_config.json" ]; then
+  DEFAULT_ALLOW=$(python3 -c "import json; d=json.load(open('$POLICY_DIR/admission_config.json')); print(str(d['plugins'][0]['configuration']['imagePolicy']['defaultAllow']).lower())" 2>/dev/null || echo "")
+  if [ "$DEFAULT_ALLOW" = "false" ]; then
+    pass "admission_config.json có defaultAllow=false"
+  else
+    fail "admission_config.json có defaultAllow=$DEFAULT_ALLOW (cần false)" \
+         "Đặt defaultAllow=false để block Pod khi external service không reachable"
+  fi
 else
-  fail "Không tìm thấy Constraint K8sAllowedRepos" \
-       "Tạo Constraint: kubectl apply -f - với kind: K8sAllowedRepos"
+  fail "Không tìm thấy $POLICY_DIR/admission_config.json" ""
 fi
 
 echo ""
 
-# --- Tiêu chí 3: Namespace policy-lab tồn tại ---
+# --- Tiêu chí 3: kubeconf trỏ đúng server https://localhost:1234 ---
 
-echo "Kiểm tra tiêu chí 3: Namespace 'policy-lab' tồn tại trong cluster"
+echo "Kiểm tra tiêu chí 3: kubeconf trỏ đến https://localhost:1234"
 
-if kubectl get namespace policy-lab &>/dev/null; then
-  pass "Namespace 'policy-lab' tồn tại trong cluster"
+if [ ! -f "$POLICY_DIR/kubeconf" ]; then
+  fail "Không tìm thấy $POLICY_DIR/kubeconf" \
+       "Chạy setup.sh để tạo file mẫu: bash setup.sh"
 else
-  fail "Namespace 'policy-lab' không tìm thấy" \
-       "Chạy setup.sh để tạo namespace: bash setup.sh"
+  if grep -q "https://localhost:1234" "$POLICY_DIR/kubeconf"; then
+    pass "kubeconf trỏ đến https://localhost:1234"
+  else
+    SERVER=$(grep "server:" "$POLICY_DIR/kubeconf" | awk '{print $2}')
+    fail "kubeconf trỏ đến '$SERVER' (cần https://localhost:1234)" \
+         "Sửa server: https://localhost:1234 trong $POLICY_DIR/kubeconf"
+  fi
+fi
+
+echo ""
+
+# --- Tiêu chí 4: kube-apiserver có ImagePolicyWebhook admission plugin ---
+
+echo "Kiểm tra tiêu chí 4: kube-apiserver bật ImagePolicyWebhook admission plugin"
+
+if [ ! -f "$APISERVER_MANIFEST" ]; then
+  fail "Không tìm thấy $APISERVER_MANIFEST" \
+       "Lab này cần chạy trên control plane node"
+else
+  if grep -q "ImagePolicyWebhook" "$APISERVER_MANIFEST"; then
+    pass "kube-apiserver có --enable-admission-plugins chứa ImagePolicyWebhook"
+  else
+    fail "kube-apiserver chưa bật ImagePolicyWebhook" \
+         "Thêm --enable-admission-plugins=NodeRestriction,ImagePolicyWebhook vào $APISERVER_MANIFEST"
+  fi
+fi
+
+echo ""
+
+# --- Tiêu chí 5: kube-apiserver có --admission-control-config-file ---
+
+echo "Kiểm tra tiêu chí 5: kube-apiserver có --admission-control-config-file"
+
+if [ -f "$APISERVER_MANIFEST" ]; then
+  if grep -q "admission-control-config-file" "$APISERVER_MANIFEST"; then
+    pass "kube-apiserver có --admission-control-config-file được cấu hình"
+  else
+    fail "kube-apiserver thiếu --admission-control-config-file" \
+         "Thêm --admission-control-config-file=/etc/kubernetes/policywebhook/admission_config.json"
+  fi
+else
+  fail "Không tìm thấy $APISERVER_MANIFEST" ""
+fi
+
+echo ""
+
+# --- Tiêu chí 6: Tạo Pod bị từ chối (external service không reachable) ---
+
+echo "Kiểm tra tiêu chí 6: Tạo Pod bị từ chối khi external service không reachable"
+
+if ! command -v kubectl &>/dev/null || ! kubectl cluster-info &>/dev/null 2>&1; then
+  fail "kubectl không kết nối được — bỏ qua kiểm tra này" ""
+else
+  TEST_OUTPUT=$(kubectl run test-pod-verify --image=nginx --restart=Never -n default 2>&1 || true)
+  kubectl delete pod test-pod-verify -n default --ignore-not-found=true &>/dev/null 2>&1 || true
+
+  if echo "$TEST_OUTPUT" | grep -qi "forbidden\|connection refused\|dial tcp"; then
+    pass "Pod bị từ chối — ImagePolicyWebhook đang hoạt động đúng"
+  else
+    fail "Pod không bị từ chối — ImagePolicyWebhook chưa hoạt động" \
+         "Kiểm tra apiserver đã restart chưa: watch crictl ps"
+  fi
 fi
 
 echo ""
@@ -125,7 +154,6 @@ if [ "$FAILED" -eq 1 ]; then
 else
   echo ""
   echo "Chúc mừng! Bạn đã hoàn thành Lab 5.3."
-  echo "Tiếp theo: Đọc phần 'Giải thích' trong README.md"
   echo "Dọn dẹp: bash cleanup.sh"
   exit 0
 fi

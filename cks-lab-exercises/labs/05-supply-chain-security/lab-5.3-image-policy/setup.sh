@@ -1,11 +1,11 @@
 #!/bin/bash
-# Lab 5.3 – Image Policy Webhook
+# Lab 5.3 – ImagePolicyWebhook Setup
 # Script khởi tạo môi trường lab
 
 set -e
 
 echo "=========================================="
-echo " Lab 5.3 – Image Policy Webhook"
+echo " Lab 5.3 – ImagePolicyWebhook Setup"
 echo " Đang khởi tạo môi trường..."
 echo "=========================================="
 
@@ -24,112 +24,122 @@ fi
 
 echo "[OK] kubectl và cluster kết nối thành công."
 
-# --- Tạo namespace policy-lab ---
+# --- Kiểm tra quyền truy cập control plane ---
+
+APISERVER_MANIFEST="/etc/kubernetes/manifests/kube-apiserver.yaml"
+POLICY_DIR="/etc/kubernetes/policywebhook"
+
+if [ ! -f "$APISERVER_MANIFEST" ]; then
+  echo "[ERROR] Không tìm thấy $APISERVER_MANIFEST"
+  echo "        Lab này yêu cầu chạy trực tiếp trên control plane node."
+  exit 1
+fi
+
+echo "[OK] Tìm thấy kube-apiserver manifest."
+
+# --- Tạo thư mục policy ---
 
 echo ""
-echo "Tạo namespace policy-lab..."
+echo "Tạo thư mục $POLICY_DIR..."
+mkdir -p "$POLICY_DIR"
+echo "[OK] Thư mục $POLICY_DIR đã được tạo."
 
-kubectl apply -f - <<EOF
+# --- Tạo self-signed cert cho external service (giả lập) ---
+
+echo ""
+echo "Tạo self-signed certificate cho external webhook service..."
+
+if [ ! -f "$POLICY_DIR/external-cert.pem" ]; then
+  openssl req -x509 -newkey rsa:2048 -keyout "$POLICY_DIR/external-key.pem" \
+    -out "$POLICY_DIR/external-cert.pem" -days 365 -nodes \
+    -subj "/CN=localhost" \
+    -addext "subjectAltName=IP:127.0.0.1" 2>/dev/null
+  echo "[OK] Certificate đã được tạo tại $POLICY_DIR/external-cert.pem"
+else
+  echo "[SKIP] Certificate đã tồn tại."
+fi
+
+# --- Tạo kubeconf (chưa điền server URL — người dùng phải tự điền) ---
+
+echo ""
+echo "Tạo file kubeconf mẫu tại $POLICY_DIR/kubeconf..."
+
+cat > "$POLICY_DIR/kubeconf" <<EOF
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: policy-lab
-  labels:
-    lab: "5.3"
-    purpose: image-policy
+kind: Config
+clusters:
+- cluster:
+    certificate-authority: /etc/kubernetes/policywebhook/external-cert.pem
+    server: https://localhost:1234
+  name: image-checker
+users:
+- name: api-server
+  user: {}
+contexts:
+- context:
+    cluster: image-checker
+    user: api-server
+  name: image-checker
+current-context: image-checker
 EOF
 
-echo "[OK] Namespace 'policy-lab' đã được tạo."
+echo "[OK] File kubeconf đã được tạo tại $POLICY_DIR/kubeconf"
 
-# --- Tạo ConstraintTemplate YAML tại /tmp/allowed-repos-template.yaml ---
+# --- Tạo admission_config.json (thiếu một số field — người dùng phải hoàn thiện) ---
 
 echo ""
-echo "Tạo ConstraintTemplate YAML tại /tmp/allowed-repos-template.yaml..."
+echo "Tạo file admission_config.json (chưa hoàn chỉnh) tại $POLICY_DIR/admission_config.json..."
 
-cat > /tmp/allowed-repos-template.yaml <<'EOF'
-apiVersion: templates.gatekeeper.sh/v1
-kind: ConstraintTemplate
-metadata:
-  name: k8sallowedrepos
-  annotations:
-    description: "Requires container images to begin with a string from the specified list."
-spec:
-  crd:
-    spec:
-      names:
-        kind: K8sAllowedRepos
-      validation:
-        openAPIV3Schema:
-          type: object
-          properties:
-            repos:
-              description: The list of prefixes a container image is allowed to have.
-              type: array
-              items:
-                type: string
-  targets:
-  - target: admission.k8s.gatekeeper.sh
-    rego: |
-      package k8sallowedrepos
-
-      violation[{"msg": msg}] {
-        container := input.review.object.spec.containers[_]
-        satisfied := [good | repo = input.parameters.repos[_]; good = startswith(container.image, repo)]
-        not any(satisfied)
-        msg := sprintf("container <%v> has an invalid image repo <%v>, allowed repos are %v",
-          [container.name, container.image, input.parameters.repos])
+cat > "$POLICY_DIR/admission_config.json" <<EOF
+{
+  "apiVersion": "apiserver.config.k8s.io/v1",
+  "kind": "AdmissionConfiguration",
+  "plugins": [
+    {
+      "name": "ImagePolicyWebhook",
+      "configuration": {
+        "imagePolicy": {
+          "kubeConfigFile": "/etc/kubernetes/policywebhook/kubeconf",
+          "allowTTL": 50,
+          "denyTTL": 50,
+          "retryBackoff": 500,
+          "defaultAllow": true
+        }
       }
-
-      violation[{"msg": msg}] {
-        container := input.review.object.spec.initContainers[_]
-        satisfied := [good | repo = input.parameters.repos[_]; good = startswith(container.image, repo)]
-        not any(satisfied)
-        msg := sprintf("initContainer <%v> has an invalid image repo <%v>, allowed repos are %v",
-          [container.name, container.image, input.parameters.repos])
-      }
+    }
+  ]
+}
 EOF
 
-echo "[OK] File /tmp/allowed-repos-template.yaml đã được tạo."
+echo "[OK] File admission_config.json đã được tạo tại $POLICY_DIR/admission_config.json"
+echo "     (Lưu ý: defaultAllow=true và allowTTL=50 — bạn cần sửa lại)"
 
 echo ""
 echo "=========================================="
 echo " Môi trường đã sẵn sàng!"
 echo "=========================================="
 echo ""
-echo "Tài nguyên đã tạo:"
-echo "  Namespace: policy-lab"
-echo "  File:      /tmp/allowed-repos-template.yaml (ConstraintTemplate)"
+echo "Files đã tạo:"
+echo "  $POLICY_DIR/admission_config.json  (cần hoàn thiện)"
+echo "  $POLICY_DIR/kubeconf               (cần kiểm tra server URL)"
+echo "  $POLICY_DIR/external-cert.pem      (self-signed cert)"
 echo ""
 echo "NHIỆM VỤ:"
-echo "  1. Cài đặt OPA Gatekeeper (nếu chưa có):"
-echo "       kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.14/deploy/gatekeeper.yaml"
-echo "       kubectl wait --for=condition=Ready pod -l control-plane=controller-manager -n gatekeeper-system --timeout=120s"
+echo "  1. Sửa admission_config.json:"
+echo "       - Đặt allowTTL = 100"
+echo "       - Đặt defaultAllow = false"
 echo ""
-echo "  2. Apply ConstraintTemplate:"
-echo "       kubectl apply -f /tmp/allowed-repos-template.yaml"
+echo "  2. Kiểm tra kubeconf trỏ đúng server https://localhost:1234"
 echo ""
-echo "  3. Tạo Constraint:"
-echo "       kubectl apply -f - <<EOF"
-echo "       apiVersion: constraints.gatekeeper.sh/v1beta1"
-echo "       kind: K8sAllowedRepos"
-echo "       metadata:"
-echo "         name: allowed-repos"
-echo "       spec:"
-echo "         match:"
-echo "           kinds:"
-echo "           - apiGroups: [\"\"]"
-echo "             kinds: [\"Pod\"]"
-echo "           namespaces:"
-echo "           - policy-lab"
-echo "         parameters:"
-echo "           repos:"
-echo "           - \"registry.k8s.io\""
-echo "           - \"docker.io/library\""
-echo "       EOF"
+echo "  3. Thêm admission plugin vào kube-apiserver:"
+echo "       --enable-admission-plugins=NodeRestriction,ImagePolicyWebhook"
+echo "       --admission-control-config-file=/etc/kubernetes/policywebhook/admission_config.json"
 echo ""
-echo "  4. Chạy verify.sh để kiểm tra kết quả:"
+echo "  4. Chờ apiserver restart và kiểm tra:"
+echo "       watch crictl ps"
+echo ""
+echo "  5. Chạy verify.sh để kiểm tra kết quả:"
 echo "       bash verify.sh"
 echo ""
-echo "Dọn dẹp sau khi hoàn thành:"
-echo "  bash cleanup.sh"
+echo "Tham khảo: README.md"
 echo ""

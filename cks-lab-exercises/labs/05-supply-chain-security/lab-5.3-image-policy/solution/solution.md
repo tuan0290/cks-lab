@@ -1,193 +1,161 @@
-# Giải pháp – Lab 5.3 Image Policy Webhook
+# Giải pháp – Lab 5.3 ImagePolicyWebhook Setup
 
-## Bước 1: Cài đặt OPA Gatekeeper
-
-```bash
-# Cài đặt Gatekeeper
-kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.14/deploy/gatekeeper.yaml
-
-# Chờ Gatekeeper sẵn sàng
-kubectl wait --for=condition=Ready pod -l control-plane=controller-manager \
-  -n gatekeeper-system --timeout=120s
-
-# Xác minh pods đang chạy
-kubectl get pods -n gatekeeper-system
-```
-
-Output mong đợi:
-```
-NAME                                             READY   STATUS    RESTARTS   AGE
-gatekeeper-audit-...                             1/1     Running   0          60s
-gatekeeper-controller-manager-...               1/1     Running   0          60s
-```
-
-## Bước 2: Apply ConstraintTemplate
+## Bước 1: Chạy setup.sh
 
 ```bash
-# Xem template đã được tạo bởi setup.sh
-cat /tmp/allowed-repos-template.yaml
-
-# Apply ConstraintTemplate
-kubectl apply -f /tmp/allowed-repos-template.yaml
+bash setup.sh
 ```
 
-Nội dung ConstraintTemplate:
-```yaml
-apiVersion: templates.gatekeeper.sh/v1
-kind: ConstraintTemplate
-metadata:
-  name: k8sallowedrepos
-spec:
-  crd:
-    spec:
-      names:
-        kind: K8sAllowedRepos
-      validation:
-        openAPIV3Schema:
-          type: object
-          properties:
-            repos:
-              type: array
-              items:
-                type: string
-  targets:
-  - target: admission.k8s.gatekeeper.sh
-    rego: |
-      package k8sallowedrepos
-      violation[{"msg": msg}] {
-        container := input.review.object.spec.containers[_]
-        satisfied := [good | repo = input.parameters.repos[_]; good = startswith(container.image, repo)]
-        not any(satisfied)
-        msg := sprintf("container <%v> has an invalid image repo <%v>, allowed repos are %v",
-          [container.name, container.image, input.parameters.repos])
+Script tạo sẵn:
+- `/etc/kubernetes/policywebhook/admission_config.json` (cần sửa)
+- `/etc/kubernetes/policywebhook/kubeconf` (cần kiểm tra)
+- `/etc/kubernetes/policywebhook/external-cert.pem`
+
+---
+
+## Bước 2: Sửa admission_config.json
+
+```bash
+vi /etc/kubernetes/policywebhook/admission_config.json
+```
+
+Nội dung đúng:
+
+```json
+{
+  "apiVersion": "apiserver.config.k8s.io/v1",
+  "kind": "AdmissionConfiguration",
+  "plugins": [
+    {
+      "name": "ImagePolicyWebhook",
+      "configuration": {
+        "imagePolicy": {
+          "kubeConfigFile": "/etc/kubernetes/policywebhook/kubeconf",
+          "allowTTL": 100,
+          "denyTTL": 50,
+          "retryBackoff": 500,
+          "defaultAllow": false
+        }
       }
+    }
+  ]
+}
 ```
 
+Hai điểm cần sửa so với file mẫu:
+- `allowTTL`: `50` → `100`
+- `defaultAllow`: `true` → `false`
+
+---
+
+## Bước 3: Kiểm tra kubeconf
+
 ```bash
-# Xác minh ConstraintTemplate đã được tạo
-kubectl get constrainttemplate k8sallowedrepos
+cat /etc/kubernetes/policywebhook/kubeconf
 ```
 
-## Bước 3: Tạo Constraint
+Nội dung đúng:
+
+```yaml
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority: /etc/kubernetes/policywebhook/external-cert.pem
+    server: https://localhost:1234
+  name: image-checker
+users:
+- name: api-server
+  user: {}
+contexts:
+- context:
+    cluster: image-checker
+    user: api-server
+  name: image-checker
+current-context: image-checker
+```
+
+Đảm bảo `server: https://localhost:1234` đúng.
+
+---
+
+## Bước 4: Cấu hình kube-apiserver
 
 ```bash
-kubectl apply -f - <<EOF
-apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sAllowedRepos
-metadata:
-  name: allowed-repos
+vi /etc/kubernetes/manifests/kube-apiserver.yaml
+```
+
+Thêm hai dòng vào phần `command`:
+
+```yaml
 spec:
-  match:
-    kinds:
-    - apiGroups: [""]
-      kinds: ["Pod"]
-    namespaces:
-    - policy-lab
-  parameters:
-    repos:
-    - "registry.k8s.io"
-    - "docker.io/library"
-EOF
+  containers:
+  - command:
+    - kube-apiserver
+    - --enable-admission-plugins=NodeRestriction,ImagePolicyWebhook
+    - --admission-control-config-file=/etc/kubernetes/policywebhook/admission_config.json
+    # ... các flag khác
 ```
+
+Lưu ý: nếu `--enable-admission-plugins` đã có sẵn, chỉ cần thêm `,ImagePolicyWebhook` vào cuối.
+
+---
+
+## Bước 5: Chờ apiserver restart
+
+Sau khi sửa manifest, kubelet sẽ tự động restart apiserver container:
 
 ```bash
-# Xác minh Constraint đã được tạo
-kubectl get k8sallowedrepos allowed-repos
-kubectl describe k8sallowedrepos allowed-repos
+watch crictl ps
 ```
 
-## Bước 4: Kiểm tra policy hoạt động
+Chờ đến khi thấy container `kube-apiserver` ở trạng thái `Running` với AGE mới.
+
+---
+
+## Bước 6: Kiểm tra hoạt động
 
 ```bash
-# Test 1: Pod từ registry được phép (phải thành công)
-kubectl run allowed-pod \
-  --image=docker.io/library/nginx:1.25-alpine \
-  --namespace=policy-lab \
-  --restart=Never
-
-# Xác minh pod được tạo
-kubectl get pod allowed-pod -n policy-lab
+kubectl run test-pod --image=nginx --restart=Never
 ```
 
-```bash
-# Test 2: Pod từ registry không được phép (phải bị từ chối)
-kubectl run denied-pod \
-  --image=gcr.io/google-containers/pause:3.1 \
-  --namespace=policy-lab \
-  --restart=Never
+Output mong đợi (external service chưa tồn tại → bị từ chối):
+
+```
+Error from server (Forbidden): pods "test-pod" is forbidden: Post "https://localhost:1234/?timeout=30s": dial tcp 127.0.0.1:1234: connect: connection refused
 ```
 
-Output mong đợi khi bị từ chối:
-```
-Error from server (Forbidden): admission webhook "validation.gatekeeper.sh" denied the request:
-[allowed-repos] container <denied-pod> has an invalid image repo <gcr.io/google-containers/pause:3.1>,
-allowed repos are ["registry.k8s.io", "docker.io/library"]
-```
+Đây là kết quả đúng — `defaultAllow=false` nên khi không liên lạc được external service, Pod bị block.
 
-## Bước 5: Chạy verify script
+---
+
+## Bước 7: Chạy verify script
 
 ```bash
 bash verify.sh
 ```
 
 Output mong đợi:
+
 ```
-[PASS] ConstraintTemplate 'k8sallowedrepos' tồn tại trong cluster
-[PASS] Constraint K8sAllowedRepos tồn tại trong cluster
-[PASS] Namespace 'policy-lab' tồn tại trong cluster
+[PASS] admission_config.json có allowTTL=100
+[PASS] admission_config.json có defaultAllow=false
+[PASS] kubeconf trỏ đến https://localhost:1234
+[PASS] kube-apiserver có --enable-admission-plugins chứa ImagePolicyWebhook
+[PASS] kube-apiserver có --admission-control-config-file được cấu hình
+[PASS] Pod bị từ chối — ImagePolicyWebhook đang hoạt động đúng
 ---
-Kết quả: 3/3 tiêu chí đạt
+Kết quả: 6/6 tiêu chí đạt
 ```
 
-## Tóm tắt lệnh Gatekeeper quan trọng
+---
 
-| Lệnh | Mục đích |
-|------|----------|
-| `kubectl get constrainttemplate` | Liệt kê tất cả ConstraintTemplate |
-| `kubectl get k8sallowedrepos` | Liệt kê Constraint của loại K8sAllowedRepos |
-| `kubectl describe k8sallowedrepos <name>` | Xem chi tiết Constraint và violations |
-| `kubectl get constrainttemplate -o yaml` | Xem Rego policy |
+## Giải thích các tham số
 
-## Kiểm tra violations
-
-```bash
-# Xem các violations hiện tại
-kubectl describe k8sallowedrepos allowed-repos | grep -A 20 "Violations:"
-
-# Hoặc
-kubectl get k8sallowedrepos allowed-repos -o jsonpath='{.status.violations}' | jq .
-```
-
-## Giải thích Rego policy
-
-```rego
-package k8sallowedrepos
-
-violation[{"msg": msg}] {
-  # Lấy từng container trong pod
-  container := input.review.object.spec.containers[_]
-  
-  # Kiểm tra xem image có bắt đầu bằng repo được phép không
-  satisfied := [good | 
-    repo = input.parameters.repos[_]
-    good = startswith(container.image, repo)
-  ]
-  
-  # Nếu không có repo nào thỏa mãn → violation
-  not any(satisfied)
-  
-  # Tạo thông báo lỗi
-  msg := sprintf("container <%v> has an invalid image repo <%v>, allowed repos are %v",
-    [container.name, container.image, input.parameters.repos])
-}
-```
-
-## Lưu ý về thứ tự kiểm tra
-
-Gatekeeper kiểm tra image prefix, vì vậy:
-- `docker.io/library/nginx:1.25-alpine` → PASS (bắt đầu bằng `docker.io/library`)
-- `nginx:1.25-alpine` → FAIL (không có prefix registry rõ ràng)
-- `registry.k8s.io/pause:3.9` → PASS (bắt đầu bằng `registry.k8s.io`)
-- `gcr.io/google-containers/pause:3.1` → FAIL
-
-Để cho phép short image names như `nginx:1.25-alpine`, thêm `docker.io/library` vào repos list (Docker Hub mặc định resolve `nginx` thành `docker.io/library/nginx`).
+| Tham số | Ý nghĩa |
+|---------|---------|
+| `allowTTL` | Cache thời gian (giây) cho quyết định "allow" từ external service |
+| `denyTTL` | Cache thời gian (giây) cho quyết định "deny" |
+| `retryBackoff` | Thời gian chờ (ms) trước khi retry khi external service lỗi |
+| `defaultAllow: false` | Block tất cả Pod nếu external service không reachable |
+| `defaultAllow: true` | Cho phép tất cả Pod nếu external service không reachable (không an toàn) |
