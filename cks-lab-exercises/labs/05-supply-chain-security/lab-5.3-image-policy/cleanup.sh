@@ -42,6 +42,19 @@ else
   echo "[SKIP] Không tìm thấy $APISERVER_MANIFEST"
 fi
 
+# --- Dừng mock server nếu đang chạy ---
+
+echo ""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PID_FILE="/tmp/mock-image-policy-server.pid"
+
+if [ -f "$PID_FILE" ] && kill -0 "$(cat $PID_FILE)" 2>/dev/null; then
+  echo "Dừng mock ImagePolicyWebhook server..."
+  bash "$SCRIPT_DIR/mock-server.sh" stop
+else
+  echo "[SKIP] Mock server không đang chạy."
+fi
+
 # --- Xóa thư mục policy ---
 
 echo ""

@@ -114,6 +114,35 @@ EOF
 echo "[OK] File admission_config.json đã được tạo tại $POLICY_DIR/admission_config.json"
 echo "     (Lưu ý: defaultAllow=true và allowTTL=50 — bạn cần sửa lại)"
 
+# --- Hỏi người dùng có muốn khởi động mock server không ---
+
+echo ""
+echo "------------------------------------------"
+echo " Tùy chọn: Mock ImagePolicyWebhook Server"
+echo "------------------------------------------"
+echo " Mock server giả lập external webhook service tại https://localhost:1234"
+echo " Cho phép image từ: registry.k8s.io, docker.io/library"
+echo " Trong thực tế: đây là một service riêng (systemd, container, hoặc external)"
+echo ""
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -f "$SCRIPT_DIR/mock-server.sh" ] && command -v python3 &>/dev/null; then
+  read -r -p "Khởi động mock server ngay bây giờ? [y/N] " START_MOCK
+  if [[ "$START_MOCK" =~ ^[Yy]$ ]]; then
+    bash "$SCRIPT_DIR/mock-server.sh" start
+  else
+    echo "[SKIP] Bỏ qua mock server."
+    echo "       Khởi động sau: bash mock-server.sh start"
+  fi
+else
+  if ! command -v python3 &>/dev/null; then
+    echo "[SKIP] python3 không tìm thấy — không thể chạy mock server."
+  else
+    echo "[SKIP] Không tìm thấy mock-server.sh."
+  fi
+fi
+
 echo ""
 echo "=========================================="
 echo " Môi trường đã sẵn sàng!"
@@ -140,6 +169,11 @@ echo "       watch crictl ps"
 echo ""
 echo "  5. Chạy verify.sh để kiểm tra kết quả:"
 echo "       bash verify.sh"
+echo ""
+echo "Mock server:"
+echo "  Khởi động: bash mock-server.sh start"
+echo "  Dừng:      bash mock-server.sh stop"
+echo "  Trạng thái: bash mock-server.sh status"
 echo ""
 echo "Tham khảo: README.md"
 echo ""
