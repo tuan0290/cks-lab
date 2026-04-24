@@ -8,8 +8,9 @@
 
 ## Mục tiêu
 
-- Cấu hình OPA/Gatekeeper ConstraintTemplate và Constraint để kiểm soát registry image
-- Chỉ cho phép image từ registry `registry.k8s.io` và `docker.io/library`
+- Cài đặt OPA/Gatekeeper trên cluster
+- Apply ConstraintTemplate `K8sAllowedRepos` (đã được chuẩn bị sẵn bởi setup.sh)
+- Tạo Constraint chỉ cho phép image từ `registry.k8s.io` và `docker.io/library` trong namespace `policy-lab`
 - Xác minh pod sử dụng image từ registry không được phép bị từ chối
 
 ---
@@ -53,7 +54,8 @@ spec:
         container := input.review.object.spec.containers[_]
         satisfied := [good | repo = input.parameters.repos[_]; good = startswith(container.image, repo)]
         not any(satisfied)
-        msg := sprintf("Image not from allowed repo: %v", [container.image])
+        msg := sprintf("container <%v> has an invalid image repo <%v>, allowed repos are %v",
+          [container.name, container.image, input.parameters.repos])
       }
 ```
 
@@ -69,34 +71,26 @@ spec:
     - apiGroups: [""]
       kinds: ["Pod"]
     namespaces:
-    - production
+    - policy-lab
   parameters:
     repos:
     - "registry.k8s.io"
     - "docker.io/library"
 ```
 
-### Kiểm tra Gatekeeper violations
+### Lưu ý về image prefix
 
-```bash
-# Xem tất cả violations
-kubectl get constraint -o json | jq '.items[].status.violations'
-
-# Xem violations của một constraint cụ thể
-kubectl describe k8sallowedrepos allowed-repos
-```
+Gatekeeper kiểm tra image theo prefix, vì vậy:
+- `docker.io/library/nginx:1.25-alpine` → ✅ PASS
+- `nginx:1.25-alpine` → ❌ FAIL (thiếu registry prefix)
+- `registry.k8s.io/pause:3.9` → ✅ PASS
+- `gcr.io/google-containers/pause:3.1` → ❌ FAIL
 
 ---
 
 ## Bối cảnh
 
 Bạn là kỹ sư bảo mật tại một công ty đang triển khai chính sách kiểm soát image registry. Yêu cầu bảo mật là chỉ cho phép deploy image từ các registry đã được phê duyệt: `registry.k8s.io` và `docker.io/library`. Bất kỳ image nào từ registry khác phải bị từ chối bởi admission controller.
-
-Nhiệm vụ của bạn là:
-1. Cài đặt OPA/Gatekeeper trên cluster (nếu chưa có)
-2. Tạo ConstraintTemplate `K8sAllowedRepos` định nghĩa logic kiểm tra
-3. Tạo Constraint áp dụng policy cho namespace `policy-lab`
-4. Xác minh pod từ registry không được phép bị từ chối
 
 ---
 
@@ -113,6 +107,10 @@ Chạy script khởi tạo môi trường:
 bash setup.sh
 ```
 
+Script sẽ tự động:
+- Tạo namespace `policy-lab`
+- Tạo file `/tmp/allowed-repos-template.yaml` (ConstraintTemplate sẵn sàng để apply)
+
 ---
 
 ## Các bước thực hiện
@@ -120,31 +118,41 @@ bash setup.sh
 ### Bước 1: Cài đặt OPA Gatekeeper
 
 ```bash
-# Cài đặt Gatekeeper phiên bản mới nhất
 kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.14/deploy/gatekeeper.yaml
 
-# Chờ Gatekeeper sẵn sàng
+# Chờ Gatekeeper sẵn sàng (có thể mất 1-2 phút)
 kubectl wait --for=condition=Ready pod -l control-plane=controller-manager \
   -n gatekeeper-system --timeout=120s
+
+# Xác minh pods đang chạy
+kubectl get pods -n gatekeeper-system
 ```
 
-### Bước 2: Tạo ConstraintTemplate
+Output mong đợi:
+```
+NAME                                             READY   STATUS    RESTARTS   AGE
+gatekeeper-audit-...                             1/1     Running   0          60s
+gatekeeper-controller-manager-...               1/1     Running   0          60s
+```
+
+### Bước 2: Apply ConstraintTemplate
+
+File `/tmp/allowed-repos-template.yaml` đã được tạo sẵn bởi `setup.sh`.
 
 ```bash
-# Xem template đã được tạo bởi setup.sh
+# Xem nội dung template
 cat /tmp/allowed-repos-template.yaml
 
 # Apply ConstraintTemplate
 kubectl apply -f /tmp/allowed-repos-template.yaml
 
-# Xác minh ConstraintTemplate đã được tạo
+# Xác minh đã được tạo
 kubectl get constrainttemplate k8sallowedrepos
 ```
 
 ### Bước 3: Tạo Constraint
 
 ```bash
-# Tạo Constraint áp dụng policy
 kubectl apply -f - <<EOF
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sAllowedRepos
@@ -162,23 +170,32 @@ spec:
     - "registry.k8s.io"
     - "docker.io/library"
 EOF
+
+# Xác minh Constraint đã được tạo
+kubectl get k8sallowedrepos allowed-repos
 ```
 
 ### Bước 4: Kiểm tra policy hoạt động
 
 ```bash
-# Thử deploy pod từ registry được phép (phải thành công)
+# Test 1: Pod từ registry được phép → phải thành công
 kubectl run allowed-pod \
   --image=docker.io/library/nginx:1.25-alpine \
   --namespace=policy-lab \
   --restart=Never
 
-# Thử deploy pod từ registry không được phép (phải bị từ chối)
+# Test 2: Pod từ registry không được phép → phải bị từ chối
 kubectl run denied-pod \
   --image=gcr.io/google-containers/pause:3.1 \
   --namespace=policy-lab \
   --restart=Never
-# Mong đợi: Error from server: admission webhook denied the request
+```
+
+Output mong đợi khi bị từ chối:
+```
+Error from server (Forbidden): admission webhook "validation.gatekeeper.sh" denied the request:
+[allowed-repos] container <denied-pod> has an invalid image repo <gcr.io/google-containers/pause:3.1>,
+allowed repos are ["registry.k8s.io", "docker.io/library"]
 ```
 
 ### Bước 5: Chạy verify script
@@ -191,8 +208,8 @@ bash verify.sh
 
 ## Tiêu chí kiểm tra
 
-- [ ] ConstraintTemplate `K8sAllowedRepos` tồn tại trong cluster (hoặc ImagePolicyWebhook được cấu hình)
-- [ ] Constraint `allowed-repos` tồn tại và áp dụng cho namespace `policy-lab`
+- [ ] ConstraintTemplate `k8sallowedrepos` tồn tại trong cluster
+- [ ] Constraint `allowed-repos` (kind: K8sAllowedRepos) tồn tại trong cluster
 - [ ] Namespace `policy-lab` tồn tại trong cluster
 
 ---
@@ -200,73 +217,46 @@ bash verify.sh
 ## Gợi ý
 
 <details>
-<summary>Gợi ý 1: Cấu trúc ConstraintTemplate</summary>
-
-ConstraintTemplate định nghĩa:
-1. Schema của Constraint (các tham số đầu vào)
-2. Rego policy logic để kiểm tra
-
-```yaml
-apiVersion: templates.gatekeeper.sh/v1
-kind: ConstraintTemplate
-metadata:
-  name: k8sallowedrepos
-spec:
-  crd:
-    spec:
-      names:
-        kind: K8sAllowedRepos
-      validation:
-        openAPIV3Schema:
-          type: object
-          properties:
-            repos:
-              type: array
-              items:
-                type: string
-  targets:
-  - target: admission.k8s.gatekeeper.sh
-    rego: |
-      package k8sallowedrepos
-      violation[{"msg": msg}] {
-        container := input.review.object.spec.containers[_]
-        satisfied := [good | repo = input.parameters.repos[_]; good = startswith(container.image, repo)]
-        not any(satisfied)
-        msg := sprintf("container <%v> has an invalid image repo <%v>, allowed repos are %v",
-          [container.name, container.image, input.parameters.repos])
-      }
-```
-
-</details>
-
-<details>
-<summary>Gợi ý 2: Kiểm tra Gatekeeper đã cài đặt chưa</summary>
+<summary>Gợi ý 1: Kiểm tra Gatekeeper đã sẵn sàng chưa</summary>
 
 ```bash
-# Kiểm tra namespace gatekeeper-system
-kubectl get namespace gatekeeper-system
-
-# Kiểm tra pods
+# Kiểm tra tất cả pods trong gatekeeper-system
 kubectl get pods -n gatekeeper-system
 
-# Kiểm tra webhook configurations
-kubectl get validatingwebhookconfigurations | grep gatekeeper
+# Theo dõi trạng thái pods
+kubectl get pods -n gatekeeper-system -w
+
+# Kiểm tra webhook đã được đăng ký
+kubectl get validatingwebhookconfiguration | grep gatekeeper
+```
+
+Gatekeeper cần tất cả pods ở trạng thái `Running` trước khi Constraint có hiệu lực.
+
+</details>
+
+<details>
+<summary>Gợi ý 2: Constraint chưa enforce ngay lập tức</summary>
+
+Sau khi apply Constraint, Gatekeeper cần vài giây để sync. Nếu test ngay mà không thấy bị từ chối, hãy chờ 10-15 giây rồi thử lại.
+
+```bash
+# Kiểm tra trạng thái Constraint
+kubectl describe k8sallowedrepos allowed-repos
 ```
 
 </details>
 
 <details>
-<summary>Gợi ý 3: Xử lý lỗi khi Gatekeeper chưa sẵn sàng</summary>
+<summary>Gợi ý 3: Xử lý lỗi "no matches for kind ConstraintTemplate"</summary>
 
-Nếu Gatekeeper chưa sẵn sàng, Constraint sẽ không được enforce. Chờ tất cả pods trong `gatekeeper-system` ở trạng thái Running:
+Nếu gặp lỗi này khi apply ConstraintTemplate, Gatekeeper chưa cài đặt hoặc chưa sẵn sàng:
 
 ```bash
-kubectl get pods -n gatekeeper-system -w
-```
+# Kiểm tra CRD của Gatekeeper đã tồn tại chưa
+kubectl get crd | grep gatekeeper
 
-Nếu gặp lỗi webhook timeout, kiểm tra:
-```bash
-kubectl describe validatingwebhookconfiguration gatekeeper-validating-webhook-configuration
+# Nếu chưa có, cài đặt lại Gatekeeper
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.14/deploy/gatekeeper.yaml
 ```
 
 </details>
@@ -286,39 +276,20 @@ Xem file [solution/solution.md](solution/solution.md) để có các bước chi
 
 ## Giải thích
 
-### OPA Gatekeeper là gì?
+### OPA Gatekeeper hoạt động như thế nào?
 
-OPA (Open Policy Agent) Gatekeeper là một admission controller cho Kubernetes, cho phép định nghĩa và enforce policy bằng ngôn ngữ Rego. Gatekeeper hoạt động như một ValidatingAdmissionWebhook — được gọi bởi API server trước khi tạo/cập nhật resource.
+Gatekeeper đăng ký một `ValidatingAdmissionWebhook` với API server. Khi có request tạo/cập nhật resource, API server gọi webhook của Gatekeeper. Gatekeeper đánh giá request theo các Constraint đang active và trả về Allow hoặc Deny.
 
-### ConstraintTemplate vs Constraint
+### Tại sao cần dùng full registry prefix?
 
-- **ConstraintTemplate**: Định nghĩa loại policy (schema + Rego logic). Giống như "class" trong OOP.
-- **Constraint**: Instance của ConstraintTemplate với tham số cụ thể. Giống như "object" trong OOP.
+Docker Hub có thể resolve `nginx` thành `docker.io/library/nginx`, nhưng Gatekeeper kiểm tra chuỗi image **trước khi** Docker resolve. Vì vậy phải dùng full prefix `docker.io/library/nginx:1.25-alpine` thay vì `nginx:1.25-alpine`.
 
 ### Tại sao kiểm soát registry quan trọng?
 
 - Ngăn chặn deploy image từ nguồn không tin cậy
-- Đảm bảo image đã qua quét bảo mật (nếu registry nội bộ có tích hợp scanning)
 - Giảm rủi ro supply chain attack (typosquatting, image poisoning)
+- Đảm bảo image đã qua quét bảo mật nếu dùng registry nội bộ
 - Tuân thủ chính sách bảo mật của tổ chức
-
-### ImagePolicyWebhook (thay thế)
-
-Kubernetes cũng có built-in `ImagePolicyWebhook` admission plugin:
-```yaml
-# /etc/kubernetes/admission-config.yaml
-apiVersion: apiserver.config.k8s.io/v1
-kind: AdmissionConfiguration
-plugins:
-- name: ImagePolicyWebhook
-  configuration:
-    imagePolicy:
-      kubeConfigFile: /etc/kubernetes/image-policy-webhook.kubeconfig
-      allowTTL: 50
-      denyTTL: 50
-      retryBackoff: 500
-      defaultAllow: false
-```
 
 ---
 
