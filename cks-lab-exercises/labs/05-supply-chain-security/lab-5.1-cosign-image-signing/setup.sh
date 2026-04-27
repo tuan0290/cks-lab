@@ -25,16 +25,27 @@ fi
 echo "[OK] kubectl và cluster kết nối thành công."
 
 if ! command -v cosign &>/dev/null; then
-  echo "[ERROR] cosign không tìm thấy."
-  echo "        Cài đặt cosign:"
-  echo "          curl -O -L https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
-  echo "          sudo mv cosign-linux-amd64 /usr/local/bin/cosign"
-  echo "          sudo chmod +x /usr/local/bin/cosign"
-  echo "        Tài liệu: https://docs.sigstore.dev/cosign/system_config/installation/"
-  exit 1
-fi
+  echo "[WARN] cosign không tìm thấy. Đang tự động cài đặt..."
+  echo ""
 
-echo "[OK] cosign đã được cài đặt: $(cosign version 2>/dev/null | head -1)"
+  curl -sL -o /tmp/cosign-linux-amd64 \
+    https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64
+  mv /tmp/cosign-linux-amd64 /usr/local/bin/cosign
+  chmod +x /usr/local/bin/cosign
+
+  if ! command -v cosign &>/dev/null; then
+    echo "[ERROR] Không thể cài đặt cosign tự động."
+    echo "        Cài đặt thủ công:"
+    echo "          curl -O -L https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
+    echo "          sudo mv cosign-linux-amd64 /usr/local/bin/cosign"
+    echo "          sudo chmod +x /usr/local/bin/cosign"
+    exit 1
+  fi
+
+  echo "[OK] cosign đã được cài đặt thành công: $(cosign version 2>/dev/null | head -1)"
+else
+  echo "[OK] cosign đã được cài đặt: $(cosign version 2>/dev/null | head -1)"
+fi
 
 # --- Tạo namespace cosign-lab ---
 
