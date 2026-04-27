@@ -23,7 +23,7 @@ echo "[OK] kubectl và cluster kết nối thành công."
 echo ""
 
 # --- Tạo namespaces ---
-for NS in m3-app m3-db m3-secure m3-system m3-vuln m3-prod m3-runtime m3-audit; do
+for NS in m3-app m3-db m3-frontend m3-backend m3-secure m3-system m3-vuln m3-prod m3-runtime m3-audit; do
   kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Namespace
@@ -35,7 +35,37 @@ EOF
   echo "[OK] Namespace '$NS' đã được tạo."
 done
 
-# --- Q1: Pod trong m3-app ---
+# --- Q1: Pods trong m3-frontend và m3-backend ---
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: frontend
+  namespace: m3-frontend
+  labels:
+    app: frontend
+spec:
+  containers:
+  - name: app
+    image: nginx:1.25-alpine
+EOF
+
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: backend
+  namespace: m3-backend
+  labels:
+    app: backend
+spec:
+  containers:
+  - name: app
+    image: nginx:1.25-alpine
+EOF
+echo "[OK] Q1: Pods frontend/backend đã được tạo."
+
+# --- Q2: Pod trong m3-app ---
 kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Pod
@@ -49,7 +79,7 @@ spec:
   - name: app
     image: nginx:1.25-alpine
 EOF
-echo "[OK] Q1: Pod backend trong m3-app đã được tạo."
+echo "[OK] Q2: Pod backend trong m3-app đã được tạo."
 
 # --- Q2: kube-bench output giả lập ---
 cat > /tmp/m3-kubebench-output.txt <<'EOF'
