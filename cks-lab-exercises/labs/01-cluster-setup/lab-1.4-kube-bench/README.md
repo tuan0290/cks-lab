@@ -31,15 +31,26 @@ Your security team requires the Kubernetes cluster to comply with CIS Kubernetes
 3. Create a ConfigMap `cis-remediation-plan` documenting at least 3 remediation steps
 4. Verify the namespace `lab-1-4` exists with label `security=cis-benchmark`
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-1-4` with label `security=cis-benchmark`.
+
+2. **Task**: Deploy kube-bench as a Kubernetes Job in namespace `lab-1-4` using image `aquasec/kube-bench:latest`.
+   - The Job must run on a control-plane node (use `nodeSelector` and tolerations)
+   - Mount required host paths: `/var/lib/etcd`, `/var/lib/kubelet`, `/etc/kubernetes`, `/usr/bin`
+
+3. **Task**: Create a ConfigMap named `cis-benchmark-results` in namespace `lab-1-4` containing:
+   - A summary of findings with PASS/FAIL/WARN counts
+   - At least 3 critical findings (e.g., anonymous-auth, audit logging, profiling)
+
+4. **Task**: Create a ConfigMap named `cis-remediation-plan` in namespace `lab-1-4` documenting remediation steps for at least 3 findings.
+   - Each entry must include: finding ID, risk description, and the fix command/config change
+
+5. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Run kube-bench as a Job
 
 ```bash
 cat <<EOF | kubectl apply -f -

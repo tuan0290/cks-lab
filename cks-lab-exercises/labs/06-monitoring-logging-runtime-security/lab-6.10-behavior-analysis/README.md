@@ -41,6 +41,39 @@ You are a security analyst investigating suspicious behavior in the production c
 5. Correlate Falco events with audit log entries by timestamp
 6. Generate a behavior analysis report
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-6-10`.
+
+2. **Task**: Create a ConfigMap named `falco-behavior-rules` in namespace `falco` with comprehensive monitoring rules covering:
+   - Network connections from containers to external IPs
+   - Process execution in containers (all processes, not just shells)
+   - File system writes outside of expected paths
+   - Kubernetes API access from within containers
+
+3. **Task**: Create a Pod named `behavior-test` in namespace `lab-6-10` using image `alpine:3.19` with command `["sleep", "3600"]`.
+
+4. **Task**: Generate some behavior events:
+   ```bash
+   kubectl exec behavior-test -n lab-6-10 -- sh -c "ls /etc; cat /etc/hostname; id"
+   ```
+
+5. **Task**: Analyze Falco logs with `jq`:
+   ```bash
+   kubectl logs -n falco -l app.kubernetes.io/name=falco --tail=50 | \
+     grep "lab-6-10" | head -10
+   ```
+
+6. **Task**: Create a ConfigMap named `behavior-analysis-report` in namespace `lab-6-10` documenting:
+   - Events detected by Falco
+   - Correlation with audit log entries
+   - Risk assessment
+   - Recommended mitigations
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

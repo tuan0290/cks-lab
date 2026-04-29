@@ -30,15 +30,25 @@ Your cluster is running Kubernetes v1.29 and needs to be upgraded to v1.30. Befo
 3. Create a ConfigMap `deprecated-apis` documenting APIs removed in v1.30
 4. Create a ConfigMap `cluster-version-info` with current cluster version details
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-1-9`.
+
+2. **Task**: Retrieve the current cluster server and client versions:
+   ```bash
+   kubectl version -o json
+   ```
+   Create a ConfigMap named `cluster-version-info` in namespace `lab-1-9` with fields `server-version`, `client-version`, and `audit-date`.
+
+3. **Task**: Create a ConfigMap named `deprecated-apis` in namespace `lab-1-9` documenting at least 2 API versions removed in Kubernetes v1.30 and their replacements.
+
+4. **Task**: Create a ConfigMap named `upgrade-security-checklist` in namespace `lab-1-9` with a pre-upgrade security checklist containing at least 5 items covering: etcd backup, deprecated API check, RBAC review, admission controller changes, and post-upgrade kube-bench run.
+
+5. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Gather cluster version information
 
 ```bash
 # Get cluster version info

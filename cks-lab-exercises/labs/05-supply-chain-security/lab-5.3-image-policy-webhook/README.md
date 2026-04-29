@@ -29,8 +29,42 @@
 
 ## Requirements
 
-1. Execute the necessary commands to configure ImagePolicyWebhook
-2. Verify the configuration is working correctly
+1. Create namespace `lab-5-3`
+2. Configure the `ImagePolicyWebhook` admission controller on the API server
+3. Create the webhook configuration file and admission control config
+4. Test that the webhook blocks or allows images based on policy
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-5-3`.
+
+2. **Task**: Create the `ImagePolicyWebhook` admission configuration file at `/etc/kubernetes/admission-control/admission-config.yaml`:
+   ```yaml
+   apiVersion: apiserver.config.k8s.io/v1
+   kind: AdmissionConfiguration
+   plugins:
+   - name: ImagePolicyWebhook
+     configuration:
+       imagePolicy:
+         kubeConfigFile: /etc/kubernetes/admission-control/webhook-kubeconfig.yaml
+         allowTTL: 50
+         denyTTL: 50
+         retryBackoff: 500
+         defaultAllow: false
+   ```
+
+3. **Task**: Add `ImagePolicyWebhook` to the kube-apiserver `--enable-admission-plugins` flag and set `--admission-control-config-file` to point to the config above.
+
+4. **Task**: Create a ConfigMap named `webhook-config-summary` in namespace `lab-5-3` documenting:
+   - The webhook endpoint URL
+   - The `defaultAllow` setting and its security implication
+   - How the webhook decides to allow/deny images
+
+5. **Task**: Create a ConfigMap named `image-policy-test-results` in namespace `lab-5-3` documenting the test results (which images were allowed/denied).
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

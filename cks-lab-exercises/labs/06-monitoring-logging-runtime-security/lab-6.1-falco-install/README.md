@@ -32,9 +32,45 @@ helm install falco falcosecurity/falco \
 
 ## Requirements
 
-1. Execute the necessary commands to configure Cài đặt Falco
-2. Verify the configuration is working correctly
-3. Document any troubleshooting steps you performed
+1. Create namespace `falco` and install Falco using Helm with eBPF driver
+2. Verify Falco pods are running and generating events
+3. Create a ConfigMap `falco-install-config` documenting the installation
+4. Test Falco is detecting events by triggering a known rule
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Install Falco using Helm in namespace `falco`:
+   ```bash
+   helm repo add falcosecurity https://falcosecurity.github.io/charts
+   helm repo update
+   helm install falco falcosecurity/falco \
+     --namespace falco --create-namespace \
+     --set driver.kind=ebpf \
+     --set tty=true
+   ```
+
+2. **Task**: Verify Falco pods are running:
+   ```bash
+   kubectl get pods -n falco
+   kubectl logs -n falco -l app.kubernetes.io/name=falco --tail=20
+   ```
+
+3. **Task**: Trigger a Falco alert by running a shell in a container:
+   ```bash
+   kubectl run test-falco --image=alpine:3.19 -it --rm \
+     --restart=Never -- sh -c "cat /etc/shadow 2>/dev/null; exit 0"
+   ```
+   Then check Falco logs for the alert.
+
+4. **Task**: Create a ConfigMap named `falco-install-config` in namespace `falco` documenting:
+   - Driver type used (`ebpf`)
+   - Helm chart version
+   - How to view Falco alerts: `kubectl logs -n falco -l app.kubernetes.io/name=falco`
+   - Key default rules that are active
+
+5. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

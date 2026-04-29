@@ -31,15 +31,32 @@ Your application needs database credentials stored securely. You must create Sec
 4. Create a Pod `app-pod` that mounts the secret as a volume (not env vars)
 5. Verify that another ServiceAccount cannot access the secret
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-4-5`.
+
+2. **Task**: Create a Secret named `db-credentials` in namespace `lab-4-5` with:
+   - `username: dbuser`
+   - `password: S3cur3P@ssw0rd`
+   Use `kubectl create secret generic`, not a YAML manifest with plaintext values.
+
+3. **Task**: Create a ServiceAccount named `app-sa` in namespace `lab-4-5` with `automountServiceAccountToken: false`.
+
+4. **Task**: Create a Role named `secret-reader` in namespace `lab-4-5` that allows only `get` on the specific secret `db-credentials` (use `resourceNames`).
+
+5. **Task**: Create a RoleBinding named `app-secret-binding` binding `secret-reader` to `app-sa`.
+
+6. **Task**: Create a Pod named `app-pod` in namespace `lab-4-5` that:
+   - Uses ServiceAccount `app-sa`
+   - Mounts `db-credentials` as a **volume** (not env vars) at `/etc/secrets`
+   - Sets `defaultMode: 0400` on the secret volume
+   - Has `readOnlyRootFilesystem: true`
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Create the database credentials secret
 
 ```bash
 kubectl create secret generic db-credentials \

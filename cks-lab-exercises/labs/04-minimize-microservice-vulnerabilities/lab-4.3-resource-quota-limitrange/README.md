@@ -47,8 +47,45 @@ spec:
 
 ## Requirements
 
-1. Create and apply the required Kubernetes manifests
-2. Verify the configuration is working correctly
+1. Create namespace `lab-4-3`
+2. Create a ResourceQuota `lab-quota` limiting CPU, memory, and pod count
+3. Create a LimitRange `lab-limits` setting default CPU/memory limits
+4. Verify a Pod without resource limits gets defaults applied from LimitRange
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-4-3`.
+
+2. **Task**: Create a ResourceQuota named `lab-quota` in namespace `lab-4-3` with:
+   - `pods: "5"`
+   - `requests.cpu: "1"`
+   - `requests.memory: 1Gi`
+   - `limits.cpu: "2"`
+   - `limits.memory: 2Gi`
+
+3. **Task**: Create a LimitRange named `lab-limits` in namespace `lab-4-3` with container defaults:
+   - `default.cpu: 200m`
+   - `default.memory: 128Mi`
+   - `defaultRequest.cpu: 100m`
+   - `defaultRequest.memory: 64Mi`
+   - `max.cpu: 500m`
+   - `max.memory: 512Mi`
+
+4. **Task**: Create a Pod named `test-pod` in namespace `lab-4-3` **without** specifying resource limits. Then verify the LimitRange applied defaults:
+   ```bash
+   kubectl get pod test-pod -n lab-4-3 \
+     -o jsonpath='{.spec.containers[0].resources}'
+   # Should show cpu: 200m, memory: 128Mi from LimitRange defaults
+   ```
+
+5. **Task**: Verify the ResourceQuota status:
+   ```bash
+   kubectl describe resourcequota lab-quota -n lab-4-3
+   ```
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

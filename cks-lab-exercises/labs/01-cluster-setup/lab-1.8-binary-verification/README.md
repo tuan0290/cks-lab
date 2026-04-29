@@ -29,15 +29,30 @@ Before deploying a new Kubernetes version, your security team requires verificat
 2. Create a ConfigMap `binary-verification-results` documenting the verification process and result
 3. Create a ConfigMap `verification-procedure` with the step-by-step verification commands
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-1-8`.
+
+2. **Task**: Find the path of the installed `kubectl` binary and compute its SHA256 checksum:
+   ```bash
+   KUBECTL_PATH=$(which kubectl)
+   sha256sum "$KUBECTL_PATH"
+   ```
+
+3. **Task**: Create a ConfigMap named `binary-verification-results` in namespace `lab-1-8` with the following fields:
+   - `binary`: the full path to the kubectl binary
+   - `sha256`: the SHA256 checksum you computed
+   - `verification-date`: current UTC timestamp
+   - `status`: `checksum-recorded`
+
+4. **Task**: Create a ConfigMap named `verification-procedure` in namespace `lab-1-8` documenting the step-by-step procedure to verify a Kubernetes binary against the official release checksum.
+   - Include the download URL pattern: `https://dl.k8s.io/release/<version>/bin/linux/amd64/kubectl.sha256`
+
+5. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Verify the kubectl binary checksum
 
 ```bash
 # Get the current kubectl version

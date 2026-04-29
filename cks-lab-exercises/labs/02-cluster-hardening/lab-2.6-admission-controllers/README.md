@@ -31,15 +31,29 @@ Your cluster's API server is missing several important admission controllers. Yo
 3. Create a ConfigMap `admission-test-results` documenting test results for key controllers
 4. Verify that `PodSecurity` admission controller is active by testing namespace labels
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-2-6`.
+
+2. **Task**: Create a Namespace named `pss-test` with the label `pod-security.kubernetes.io/enforce: restricted`.
+
+3. **Task**: Attempt to create a privileged Pod in namespace `pss-test` and confirm it is **blocked**:
+   ```bash
+   kubectl run test-priv --image=nginx:1.25 \
+     --overrides='{"spec":{"containers":[{"name":"test","image":"nginx:1.25","securityContext":{"privileged":true}}]}}' \
+     -n pss-test
+   # Expected: Error from server (Forbidden)
+   ```
+
+4. **Task**: Create a ConfigMap named `admission-controllers-config` in namespace `lab-2-6` listing at least 5 security-relevant admission controllers with their purpose.
+
+5. **Task**: Create a ConfigMap named `admission-test-results` in namespace `lab-2-6` documenting the result of the PodSecurity test above.
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Check enabled admission controllers
 
 ```bash
 # Check kube-apiserver flags (on control plane node)

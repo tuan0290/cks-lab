@@ -26,8 +26,47 @@
 
 ## Requirements
 
-1. Create and apply the required Kubernetes manifests
-2. Verify the configuration is working correctly
+1. Create namespace `lab-6-2`
+2. Write a Falco custom rule to detect shell spawning in containers
+3. Write a Falco custom rule to detect sensitive file access (`/etc/shadow`, `/etc/passwd`)
+4. Deploy the custom rules via a ConfigMap and Falco Helm values
+5. Test the rules by triggering the conditions
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-6-2`.
+
+2. **Task**: Create a ConfigMap named `falco-custom-rules` in namespace `lab-6-2` containing a `rules.yaml` key with these Falco rules:
+
+   **Rule 1 — Shell in container**:
+   ```yaml
+   - rule: Shell Spawned in Container
+     desc: Detect shell execution inside a container
+     condition: spawned_process and container and proc.name in (shell_binaries)
+     output: "Shell spawned in container (user=%user.name shell=%proc.name pod=%k8s.pod.name ns=%k8s.ns.name)"
+     priority: WARNING
+     tags: [shell, container]
+   ```
+
+   **Rule 2 — Sensitive file read**:
+   ```yaml
+   - rule: Read Sensitive File
+     desc: Detect reads of sensitive files like /etc/shadow
+     condition: open_read and fd.name in (/etc/shadow, /etc/sudoers, /root/.ssh/authorized_keys)
+     output: "Sensitive file read (user=%user.name file=%fd.name pod=%k8s.pod.name)"
+     priority: ERROR
+     tags: [filesystem, sensitive]
+   ```
+
+3. **Task**: Create a ConfigMap named `falco-rules-test-plan` in namespace `lab-6-2` documenting how to test each rule:
+   - Shell rule: `kubectl exec <pod> -- sh -c "id"`
+   - File rule: `kubectl exec <pod> -- cat /etc/shadow`
+
+4. **Task**: Create a Pod named `test-target` in namespace `lab-6-2` using image `alpine:3.19` with command `["sleep", "3600"]` to use as a test target.
+
+5. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

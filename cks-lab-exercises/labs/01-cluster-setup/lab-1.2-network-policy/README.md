@@ -35,8 +35,31 @@ spec:
 
 ## Requirements
 
-1. Create and apply the required Kubernetes manifests
-2. Verify the configuration is working correctly
+1. Create namespace `lab-1-2` with label `env=lab`
+2. Deploy pods `frontend` (label: `app=frontend`) and `backend` (label: `app=backend`) in namespace `lab-1-2`
+3. Create a NetworkPolicy `default-deny-ingress` that denies all ingress to all pods in `lab-1-2`
+4. Create a NetworkPolicy `allow-frontend-to-backend` that allows only `frontend` pods to reach `backend` pods on port 8080
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-1-2` with label `env=lab`.
+
+2. **Task**: Create a Pod named `frontend` in namespace `lab-1-2` with label `app=frontend` using image `nginx:1.25`.
+
+3. **Task**: Create a Pod named `backend` in namespace `lab-1-2` with label `app=backend` using image `nginx:1.25`.
+
+4. **Task**: Create a NetworkPolicy named `default-deny-ingress` in namespace `lab-1-2` that:
+   - Applies to **all pods** (`podSelector: {}`)
+   - Denies **all ingress** traffic (policyTypes: `[Ingress]` with no ingress rules)
+
+5. **Task**: Create a NetworkPolicy named `allow-frontend-to-backend` in namespace `lab-1-2` that:
+   - Applies to pods with label `app=backend`
+   - Allows ingress **only** from pods with label `app=frontend`
+   - Only on TCP port `8080`
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

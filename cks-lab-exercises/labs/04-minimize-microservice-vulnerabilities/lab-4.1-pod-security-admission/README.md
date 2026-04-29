@@ -26,8 +26,44 @@
 
 ## Requirements
 
-1. Create and apply the required Kubernetes manifests
-2. Verify the configuration is working correctly
+1. Create namespace `lab-4-1-baseline` with PSA `baseline` enforcement
+2. Create namespace `lab-4-1-restricted` with PSA `restricted` enforcement
+3. Verify a compliant pod runs in `restricted` namespace
+4. Verify a privileged pod is blocked in `baseline` namespace
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create a namespace named `lab-4-1-baseline` with these labels:
+   ```yaml
+   pod-security.kubernetes.io/enforce: baseline
+   pod-security.kubernetes.io/enforce-version: latest
+   pod-security.kubernetes.io/warn: baseline
+   pod-security.kubernetes.io/audit: baseline
+   ```
+
+2. **Task**: Create a namespace named `lab-4-1-restricted` with these labels:
+   ```yaml
+   pod-security.kubernetes.io/enforce: restricted
+   pod-security.kubernetes.io/enforce-version: latest
+   ```
+
+3. **Task**: Attempt to create a privileged Pod in `lab-4-1-baseline` and confirm it is **blocked**:
+   ```bash
+   kubectl run priv-test --image=nginx:1.25 -n lab-4-1-baseline \
+     --overrides='{"spec":{"containers":[{"name":"c","image":"nginx:1.25","securityContext":{"privileged":true}}]}}'
+   # Expected: Error - violates PodSecurity "baseline"
+   ```
+
+4. **Task**: Create a fully compliant Pod named `restricted-pod` in `lab-4-1-restricted` with:
+   - `securityContext.runAsNonRoot: true`, `runAsUser: 1000`
+   - `securityContext.seccompProfile.type: RuntimeDefault`
+   - `containers[0].securityContext.allowPrivilegeEscalation: false`
+   - `containers[0].securityContext.capabilities.drop: [ALL]`
+   - `containers[0].securityContext.readOnlyRootFilesystem: true`
+
+5. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

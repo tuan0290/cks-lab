@@ -31,15 +31,37 @@ Several microservices in your cluster are running with insecure security context
    - Container-level: `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: [ALL]`
 3. Create a Pod `multi-container-app` with different security contexts per container
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-4-4`.
+
+2. **Task**: Create a Pod named `secure-app` in namespace `lab-4-4` with these pod-level security context settings:
+   - `runAsNonRoot: true`
+   - `runAsUser: 1000`
+   - `runAsGroup: 3000`
+   - `fsGroup: 2000`
+   - `seccompProfile.type: RuntimeDefault`
+
+3. **Task**: Ensure the container in `secure-app` has these container-level settings:
+   - `allowPrivilegeEscalation: false`
+   - `readOnlyRootFilesystem: true`
+   - `capabilities.drop: [ALL]`
+   - `capabilities.add: [NET_BIND_SERVICE]`
+   - Mount an `emptyDir` volume at `/tmp` to allow writes
+
+4. **Task**: Create a Pod named `multi-container-app` in namespace `lab-4-4` with 2 containers (`frontend` running as UID 101, `sidecar` running as UID 1000), each with `allowPrivilegeEscalation: false` and `capabilities.drop: [ALL]`.
+
+5. **Task**: Verify the security context on `secure-app`:
+   ```bash
+   kubectl get pod secure-app -n lab-4-4 \
+     -o jsonpath='{.spec.securityContext}'
+   ```
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Create the secure pod
 
 ```bash
 cat <<EOF | kubectl apply -f -

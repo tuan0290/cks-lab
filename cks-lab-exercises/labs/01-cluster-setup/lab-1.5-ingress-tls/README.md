@@ -33,15 +33,32 @@ Your team needs to expose a web application securely over HTTPS. You must create
 4. Create a Service `web-app-svc` exposing the deployment on port 80
 5. Create an Ingress `web-app-ingress` with TLS configured using `app-tls-secret`
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-1-5`.
+
+2. **Task**: Generate a self-signed TLS certificate for hostname `app.example.com` with validity of 365 days:
+   ```bash
+   openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+     -keyout /tmp/tls.key -out /tmp/tls.crt \
+     -subj "/CN=app.example.com/O=lab"
+   ```
+
+3. **Task**: Create a TLS Secret named `app-tls-secret` in namespace `lab-1-5` using the generated certificate.
+   - The Secret type must be `kubernetes.io/tls`
+
+4. **Task**: Create a Deployment named `web-app` in namespace `lab-1-5` using image `nginx:1.25`, and a Service named `web-app-svc` exposing it on port 80.
+
+5. **Task**: Create an Ingress named `web-app-ingress` in namespace `lab-1-5` that:
+   - Terminates TLS using Secret `app-tls-secret`
+   - Routes traffic for host `app.example.com` to Service `web-app-svc` on port 80
+   - Forces HTTPS redirect (annotation: `nginx.ingress.kubernetes.io/ssl-redirect: "true"`)
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Generate a self-signed TLS certificate
 
 ```bash
 # Generate private key and self-signed certificate

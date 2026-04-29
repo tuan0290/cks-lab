@@ -37,9 +37,41 @@ resources:
 
 ## Requirements
 
-1. Execute the necessary commands to configure Cấu hình etcd Encryption
-2. Create and apply the required Kubernetes manifests
-3. Verify the configuration is working correctly
+1. Generate a 32-byte base64-encoded encryption key
+2. Create an `EncryptionConfiguration` file at `/etc/kubernetes/encryption-config.yaml` using `aescbc` provider for Secrets
+3. Configure the kube-apiserver to use the encryption config via `--encryption-provider-config` flag
+4. Restart the kube-apiserver and verify it comes back healthy
+5. Create a new Secret and verify it is stored encrypted in etcd
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Generate a random 32-byte base64 key to use as the encryption secret.
+   - Command: `head -c 32 /dev/urandom | base64`
+
+2. **Task**: Create the file `/etc/kubernetes/encryption-config.yaml` with the following spec:
+   - Use `aescbc` as the primary provider for `secrets`
+   - Include `identity: {}` as the fallback provider
+   - Use the key you generated in task 1
+
+3. **Task**: Edit `/etc/kubernetes/manifests/kube-apiserver.yaml` to add the flag:
+   ```
+   --encryption-provider-config=/etc/kubernetes/encryption-config.yaml
+   ```
+   Also mount the config file into the kube-apiserver pod.
+
+4. **Task**: After the kube-apiserver restarts, create a Secret named `test-secret` in the `default` namespace with key `password` and value `mysecretvalue`.
+
+5. **Task**: Verify the Secret is encrypted in etcd by running:
+   ```bash
+   ETCDCTL_API=3 etcdctl get /registry/secrets/default/test-secret \
+     --endpoints=https://127.0.0.1:2379 \
+     --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+     --cert=/etc/kubernetes/pki/etcd/server.crt \
+     --key=/etc/kubernetes/pki/etcd/server.key | hexdump -C | head
+   ```
+   The output should show `k8s:enc:aescbc:v1:` prefix, confirming encryption.
 
 ## Instructions
 

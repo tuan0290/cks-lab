@@ -31,6 +31,32 @@ Your security team requires all container images to be scanned for vulnerabiliti
 5. Create a deployment `scanned-app` with scan result annotations
 6. Demonstrate scanning a Kubernetes manifest for misconfigurations
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-5-11`.
+
+2. **Task**: Scan `nginx:1.25` with Trivy locally (if available):
+   ```bash
+   trivy image --severity HIGH,CRITICAL nginx:1.25
+   trivy image --format json --output /tmp/scan-results.json nginx:1.25
+   ```
+
+3. **Task**: Create a ConfigMap named `scan-policy` in namespace `lab-5-11` with:
+   - `max-critical: "0"`
+   - `max-high: "5"`
+   - `scan-tool: trivy`
+   - `block-on-critical: "true"`
+
+4. **Task**: Create a ConfigMap named `scan-results` in namespace `lab-5-11` with annotations `security.scan/tool: trivy` and `security.scan/date: <timestamp>`, and data fields `image`, `summary`, `policy-result`.
+
+5. **Task**: Create a Job named `trivy-scanner` in namespace `lab-5-11` using image `aquasec/trivy:latest` that scans `nginx:1.25` with `--severity HIGH,CRITICAL --exit-code 0`.
+
+6. **Task**: Create a Deployment named `scanned-app` in namespace `lab-5-11` using image `nginx:1.25` with pod template annotations `security.scan/tool: trivy` and `security.scan/status: passed`.
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

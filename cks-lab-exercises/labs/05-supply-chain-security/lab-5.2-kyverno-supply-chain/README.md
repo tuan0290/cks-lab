@@ -48,8 +48,30 @@ spec:
 
 ## Requirements
 
-1. Create and apply the required Kubernetes manifests
-2. Verify the configuration is working correctly
+1. Create namespace `lab-5-2`
+2. Create a Kyverno ClusterPolicy `restrict-registries` allowing only approved registries
+3. Create a Kyverno ClusterPolicy `verify-image-signatures` requiring Cosign signatures
+4. Deploy a compliant application using an approved registry image
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-5-2`.
+
+2. **Task**: Create a Kyverno `ClusterPolicy` named `restrict-registries` in `Audit` mode that validates pods in namespace `lab-5-2` use only images from `gcr.io/distroless/*` or `docker.io/library/*`.
+
+3. **Task**: Create a Kyverno `ClusterPolicy` named `verify-image-signatures` in `Audit` mode with a `verifyImages` rule for images in namespace `lab-5-2`.
+
+4. **Task**: Create a Deployment named `compliant-app` in namespace `lab-5-2` using image `gcr.io/distroless/static-debian12:nonroot` with:
+   - `runAsNonRoot: true`, `runAsUser: 65534`
+   - `readOnlyRootFilesystem: true`
+   - `allowPrivilegeEscalation: false`
+   - `capabilities.drop: [ALL]`
+
+5. **Task**: Create a ConfigMap named `kyverno-policy-summary` in namespace `lab-5-2` documenting both policies, their enforcement actions, and what they protect against.
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

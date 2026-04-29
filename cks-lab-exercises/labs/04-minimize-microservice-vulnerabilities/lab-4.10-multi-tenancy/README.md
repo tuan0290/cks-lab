@@ -30,15 +30,36 @@ You need to set up two isolated tenant namespaces (`tenant-a` and `tenant-b`) wi
 3. Create NetworkPolicy in each namespace blocking cross-tenant traffic
 4. Create ServiceAccounts `tenant-a-user` and `tenant-b-user` with namespace-scoped RBAC
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create two namespaces `tenant-a` and `tenant-b`, each with:
+   - Label `tenant: <tenant-name>`
+   - Pod Security Standard labels: `pod-security.kubernetes.io/enforce: restricted`
+
+2. **Task**: Create a ResourceQuota named `tenant-quota` in **each** tenant namespace with:
+   - `pods: "10"`
+   - `requests.cpu: "2"`, `requests.memory: 2Gi`
+   - `limits.cpu: "4"`, `limits.memory: 4Gi`
+
+3. **Task**: Create a NetworkPolicy named `tenant-isolation` in **each** tenant namespace that:
+   - Allows ingress **only** from the same tenant namespace
+   - Allows egress **only** to the same tenant namespace
+   - Allows egress to `kube-system` on UDP/TCP port 53 for DNS
+
+4. **Task**: Create a ServiceAccount named `<tenant>-user` in each tenant namespace with a Role `tenant-role` allowing `get/list/create/update/delete` on `pods`, `deployments`, `services`, `configmaps`.
+
+5. **Task**: Verify tenant-a cannot access tenant-b:
+   ```bash
+   kubectl auth can-i list pods -n tenant-b \
+     --as=system:serviceaccount:tenant-a:tenant-a-user
+   # Expected: no
+   ```
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Create tenant namespaces with PSS
 
 ```bash
 for tenant in tenant-a tenant-b; do

@@ -31,15 +31,31 @@ Several pods in your cluster are automatically mounting ServiceAccount tokens th
 4. Create a ServiceAccount `api-reader-sa` with a Role allowing only `get` on pods
 5. Create a Pod `api-reader-pod` using `api-reader-sa`
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-2-5`.
+
+2. **Task**: Create a ServiceAccount named `no-token-sa` in namespace `lab-2-5` with `automountServiceAccountToken: false`.
+
+3. **Task**: Create a Pod named `no-token-pod` in namespace `lab-2-5` that:
+   - Uses ServiceAccount `no-token-sa`
+   - Sets `automountServiceAccountToken: false` at the pod level
+   - Confirm no token is mounted: `kubectl exec no-token-pod -n lab-2-5 -- ls /var/run/secrets/kubernetes.io/serviceaccount/ 2>&1`
+
+4. **Task**: Create a ServiceAccount named `api-reader-sa` in namespace `lab-2-5`, a Role named `pod-reader` allowing only `get` and `list` on `pods`, and a RoleBinding `api-reader-binding` connecting them.
+
+5. **Task**: Create a Pod named `api-reader-pod` in namespace `lab-2-5` using ServiceAccount `api-reader-sa`.
+
+6. **Task**: Generate a short-lived bound token for `api-reader-sa` with 1-hour expiry:
+   ```bash
+   kubectl create token api-reader-sa -n lab-2-5 --duration=3600s
+   ```
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Create ServiceAccount with disabled auto-mount
 
 ```bash
 cat <<EOF | kubectl apply -f -

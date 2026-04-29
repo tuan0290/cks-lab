@@ -42,6 +42,49 @@ Your security team needs to implement comprehensive network monitoring for the c
 5. Verify that unauthorized connections are blocked and detected
 6. Generate a network traffic analysis report
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-6-12`.
+
+2. **Task**: Create a ConfigMap named `falco-network-rules` in namespace `falco` with Falco rules for:
+
+   **Rule 1 — Unexpected outbound connection**:
+   ```yaml
+   - rule: Unexpected Outbound Connection
+     desc: Detect outbound connections on non-standard ports from containers
+     condition: >
+       outbound and container and
+       k8s.ns.name = "lab-6-12" and
+       not fd.sport in (80, 443, 53, 8080, 8443)
+     output: >
+       Unexpected outbound connection
+       (user=%user.name cmd=%proc.cmdline connection=%fd.name pod=%k8s.pod.name)
+     priority: WARNING
+   ```
+
+3. **Task**: Create a NetworkPolicy named `restrict-egress` in namespace `lab-6-12` that:
+   - Allows egress to `kube-system` on port 53 (DNS)
+   - Allows egress to pods within the same namespace
+   - Blocks all other egress
+
+4. **Task**: Create a Pod named `network-test` in namespace `lab-6-12` using image `alpine:3.19` with command `["sleep", "3600"]`.
+
+5. **Task**: Test the NetworkPolicy:
+   ```bash
+   # Should be blocked
+   kubectl exec network-test -n lab-6-12 -- wget -T 3 -q https://google.com -O /dev/null 2>&1 || echo "Blocked as expected"
+   ```
+
+6. **Task**: Create a ConfigMap named `network-analysis-report` in namespace `lab-6-12` documenting:
+   - Observed legitimate traffic patterns
+   - Blocked connection attempts
+   - Falco alerts generated
+   - NetworkPolicy rules applied
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

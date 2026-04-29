@@ -34,7 +34,37 @@ version = 3
 
 ## Requirements
 
-1. Verify the configuration is working correctly
+1. Verify containerd is running on the node with `systemctl status containerd`
+2. Inspect `/etc/containerd/config.toml` and confirm `SystemdCgroup = true` is set
+3. Create a ConfigMap `containerd-config-summary` in namespace `lab-1-3` documenting the current containerd configuration
+4. Create a ConfigMap `containerd-security-settings` documenting recommended security settings
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-1-3`.
+
+2. **Task**: Inspect the containerd configuration on the node:
+   ```bash
+   cat /etc/containerd/config.toml
+   ```
+   Confirm that `SystemdCgroup = true` is set under the runc runtime options. If not, add it and restart containerd:
+   ```bash
+   systemctl restart containerd
+   ```
+
+3. **Task**: Create a ConfigMap named `containerd-config-summary` in namespace `lab-1-3` with the following data:
+   - Key `runtime`: value `io.containerd.runc.v2`
+   - Key `systemd-cgroup`: value `true`
+   - Key `config-path`: value `/etc/containerd/config.toml`
+
+4. **Task**: Create a ConfigMap named `containerd-security-settings` in namespace `lab-1-3` documenting at least 3 security settings:
+   - `SystemdCgroup: true` — use systemd for cgroup management
+   - `no_new_privileges: true` — prevent privilege escalation
+   - `seccomp_profile: RuntimeDefault` — apply default seccomp profile
+
+5. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

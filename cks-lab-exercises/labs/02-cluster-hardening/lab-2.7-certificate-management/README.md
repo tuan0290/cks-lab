@@ -30,6 +30,41 @@ Your cluster certificates are approaching expiration. You need to audit all cert
 3. Create a CertificateSigningRequest `dev-user-csr` for a developer user
 4. Approve the CSR and create a ConfigMap `csr-procedure` documenting the process
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-2-7`.
+
+2. **Task**: Generate a private key and CSR for user `dev-user` in group `developers`:
+   ```bash
+   openssl genrsa -out /tmp/dev-user.key 2048
+   openssl req -new -key /tmp/dev-user.key -out /tmp/dev-user.csr \
+     -subj "/CN=dev-user/O=developers"
+   ```
+
+3. **Task**: Create a Kubernetes `CertificateSigningRequest` named `dev-user-csr` with:
+   - `signerName: kubernetes.io/kube-apiserver-client`
+   - `expirationSeconds: 86400`
+   - `usages: [client auth]`
+   - The base64-encoded content of `/tmp/dev-user.csr`
+
+4. **Task**: Approve the CSR and verify it shows `Approved,Issued`:
+   ```bash
+   kubectl certificate approve dev-user-csr
+   kubectl get csr dev-user-csr
+   ```
+
+5. **Task**: Retrieve the signed certificate:
+   ```bash
+   kubectl get csr dev-user-csr -o jsonpath='{.status.certificate}' | base64 -d > /tmp/dev-user.crt
+   openssl x509 -in /tmp/dev-user.crt -noout -subject -dates
+   ```
+
+6. **Task**: Create ConfigMaps `cert-expiry-report` and `csr-procedure` in namespace `lab-2-7`.
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

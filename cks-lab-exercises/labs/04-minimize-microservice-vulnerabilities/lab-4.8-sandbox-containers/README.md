@@ -31,15 +31,31 @@ Your security team requires that untrusted workloads run in a sandboxed environm
 3. Create a Pod `sandboxed-app` using the `gvisor` RuntimeClass
 4. Create a ConfigMap `sandbox-comparison` documenting sandbox technologies
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-4-8`.
+
+2. **Task**: Create a `RuntimeClass` named `gvisor` with `handler: runsc`.
+
+3. **Task**: Create a Pod named `sandboxed-app` in namespace `lab-4-8` using image `nginx:1.25` with `spec.runtimeClassName: gvisor`.
+   > Note: The pod may remain `Pending` if gVisor is not installed on nodes — this is expected. The spec must be correct.
+
+4. **Task**: Create a ConfigMap named `sandbox-comparison` in namespace `lab-4-8` comparing:
+   - **gVisor**: user-space kernel, handler `runsc`, use case: untrusted workloads
+   - **Kata Containers**: VM-based isolation, handler `kata-runtime`, use case: maximum isolation
+   - **runc**: shared host kernel, default handler, use case: trusted workloads
+
+5. **Task**: Verify the RuntimeClass was created correctly:
+   ```bash
+   kubectl get runtimeclass gvisor -o jsonpath='{.handler}'
+   # Expected: runsc
+   ```
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Create the gVisor RuntimeClass
 
 ```bash
 cat <<EOF | kubectl apply -f -

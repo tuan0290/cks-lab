@@ -35,6 +35,59 @@ Your security team needs to detect when containers are started with privileged m
 5. Test the rules by deploying a privileged pod and verifying Falco generates alerts
 6. Rule output must include: container name, image, user, and privilege details
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-6-6`.
+
+2. **Task**: Create a ConfigMap named `falco-privileged-rules` in namespace `falco` with a `rules.yaml` key containing:
+
+   **Rule 1 — Privileged container**:
+   ```yaml
+   - rule: Privileged Container Started
+     desc: Detect a privileged container being started
+     condition: >
+       container_started and container.privileged=true and
+       not container.image.repository in (falco, cilium, calico)
+     output: >
+       Privileged container started
+       (user=%user.name image=%container.image.repository:%container.image.tag
+       pod=%k8s.pod.name ns=%k8s.ns.name)
+     priority: CRITICAL
+     tags: [container, privilege-escalation]
+   ```
+
+   **Rule 2 — Dangerous capabilities**:
+   ```yaml
+   - rule: Container with Dangerous Capabilities
+     desc: Detect containers with SYS_ADMIN or NET_ADMIN capabilities
+     condition: >
+       container_started and
+       (container.caps.effective contains SYS_ADMIN or
+        container.caps.effective contains NET_ADMIN)
+     output: >
+       Container with dangerous capabilities
+       (caps=%container.caps.effective pod=%k8s.pod.name ns=%k8s.ns.name)
+     priority: WARNING
+     tags: [container, capabilities]
+   ```
+
+3. **Task**: Create a privileged Pod named `privileged-test` in namespace `lab-6-6` to trigger the rule:
+   ```yaml
+   securityContext:
+     privileged: true
+   ```
+
+4. **Task**: Verify Falco generated the alert:
+   ```bash
+   kubectl logs -n falco -l app.kubernetes.io/name=falco --tail=30 | grep "Privileged container"
+   ```
+
+5. **Task**: Create a ConfigMap named `privileged-detection-results` in namespace `lab-6-6` documenting the Falco alert output.
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

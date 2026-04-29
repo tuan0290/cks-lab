@@ -37,8 +37,40 @@
 
 ## Requirements
 
-1. Create and apply the required Kubernetes manifests
-2. Verify the configuration is working correctly
+1. Create namespace `lab-3-1`
+2. Create a Pod `seccomp-default` using `seccompProfile.type: RuntimeDefault`
+3. Create a Pod `seccomp-localhost` using a custom localhost seccomp profile
+4. Verify both pods are running with the correct seccomp profiles
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-3-1`.
+
+2. **Task**: Create a Pod named `seccomp-default` in namespace `lab-3-1` using image `nginx:1.25` with:
+   - `securityContext.seccompProfile.type: RuntimeDefault`
+   - `securityContext.runAsNonRoot: true`
+   - `securityContext.runAsUser: 1000`
+   - `containers[0].securityContext.allowPrivilegeEscalation: false`
+
+3. **Task**: Create a custom seccomp profile at `/var/lib/kubelet/seccomp/audit.json` on the node:
+   ```json
+   {"defaultAction": "SCMP_ACT_LOG"}
+   ```
+
+4. **Task**: Create a Pod named `seccomp-localhost` in namespace `lab-3-1` using image `nginx:1.25` with:
+   - `securityContext.seccompProfile.type: Localhost`
+   - `securityContext.seccompProfile.localhostProfile: audit.json`
+
+5. **Task**: Verify the seccomp profile on `seccomp-default`:
+   ```bash
+   kubectl get pod seccomp-default -n lab-3-1 \
+     -o jsonpath='{.spec.securityContext.seccompProfile.type}'
+   # Expected: RuntimeDefault
+   ```
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

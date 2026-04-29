@@ -30,6 +30,29 @@ A security audit has flagged several control plane components as insufficiently 
 3. Create a ConfigMap `etcd-security-config` documenting etcd security settings
 4. Create a ConfigMap `control-plane-audit` with the audit findings
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-2-8`.
+
+2. **Task**: Inspect the kube-apiserver manifest and check for these security flags:
+   ```bash
+   grep -E "anonymous-auth|authorization-mode|profiling|audit-log" \
+     /etc/kubernetes/manifests/kube-apiserver.yaml
+   ```
+
+3. **Task**: Create a ConfigMap named `apiserver-security-config` in namespace `lab-2-8` documenting at least 6 recommended kube-apiserver security flags with their values (e.g., `--anonymous-auth=false`, `--profiling=false`, `--authorization-mode=Node,RBAC`, etc.).
+
+4. **Task**: Create a ConfigMap named `etcd-security-config` in namespace `lab-2-8` documenting etcd TLS settings:
+   - `--cert-file`, `--key-file`, `--trusted-ca-file`
+   - `--client-cert-auth=true`
+   - `--peer-client-cert-auth=true`
+
+5. **Task**: Create a ConfigMap named `control-plane-audit` in namespace `lab-2-8` listing at least 4 security findings from your inspection (e.g., which flags are present/missing).
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

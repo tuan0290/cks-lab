@@ -30,6 +30,37 @@ Your security audit has identified that several production containers are runnin
 4. Demonstrate that a non-hardened pod is rejected by the namespace PSS policy
 5. Create a Kyverno policy `enforce-container-hardening` to enforce hardening standards
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-5-10` with PSS labels:
+   ```yaml
+   pod-security.kubernetes.io/enforce: restricted
+   pod-security.kubernetes.io/enforce-version: latest
+   pod-security.kubernetes.io/warn: restricted
+   pod-security.kubernetes.io/audit: restricted
+   ```
+
+2. **Task**: Create a ConfigMap named `hardening-checklist` in namespace `lab-5-10` with a checklist covering: `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, `seccompProfile: RuntimeDefault`.
+
+3. **Task**: Create a Deployment named `hardened-app` in namespace `lab-5-10` using image `gcr.io/distroless/static-debian12:nonroot` with ALL of the following:
+   - `runAsNonRoot: true`, `runAsUser: 65534`, `fsGroup: 65534`
+   - `seccompProfile.type: RuntimeDefault`
+   - `allowPrivilegeEscalation: false`
+   - `readOnlyRootFilesystem: true`
+   - `capabilities.drop: [ALL]`
+
+4. **Task**: Attempt to create a non-hardened Pod in `lab-5-10` and confirm it is **blocked**:
+   ```bash
+   kubectl run bad-pod --image=nginx:1.25 -n lab-5-10
+   # Expected: Error - violates PodSecurity "restricted"
+   ```
+
+5. **Task**: Create a Kyverno ClusterPolicy named `enforce-container-hardening` in Audit mode with rules requiring `runAsNonRoot`, `readOnlyRootFilesystem`, and `capabilities.drop: [ALL]` for pods in namespace `lab-5-10`.
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

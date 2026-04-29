@@ -36,6 +36,25 @@ Your organization uses Kubernetes for deployments triggered by a CI/CD pipeline.
 5. Create a Job `image-scanner` that simulates the scanning step in a pipeline
 6. Deploy an application only after the scan passes (no CRITICAL vulnerabilities)
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-5-6`.
+
+2. **Task**: Create a ServiceAccount named `cicd-deployer` in namespace `lab-5-6` with a Role `cicd-deployer-role` that allows only `get/list/create/update/patch` on `deployments` and `configmaps` — no cluster-wide permissions.
+
+3. **Task**: Create a ConfigMap named `pipeline-config` in namespace `lab-5-6` with:
+   - `scan-severity-threshold: CRITICAL`
+   - `block-on-critical: "true"`
+   - `scan-tool: trivy`
+
+4. **Task**: Create a Job named `image-scanner` in namespace `lab-5-6` using image `aquasec/trivy:latest` that scans `nginx:1.25` for CRITICAL/HIGH vulnerabilities.
+
+5. **Task**: Create a Deployment named `pipeline-app` in namespace `lab-5-6` using image `nginx:1.25` with pod template annotations `security.scan/status: passed` and `security.scan/tool: trivy`.
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

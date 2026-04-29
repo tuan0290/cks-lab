@@ -47,6 +47,31 @@ You must implement NetworkPolicies to enforce strict network segmentation:
 5. Create a NetworkPolicy allowing DNS resolution for all pods
 6. Verify that unauthorized traffic paths are blocked
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-6-7` and deploy 3 pods:
+   - `frontend` with label `tier=frontend` and `app=web`
+   - `backend` with label `tier=backend` and `app=api`
+   - `database` with label `tier=database` and `app=db`
+
+2. **Task**: Create a NetworkPolicy named `default-deny-all` in namespace `lab-6-7` that denies **all** ingress and egress for all pods (`podSelector: {}`, `policyTypes: [Ingress, Egress]`).
+
+3. **Task**: Create a NetworkPolicy named `allow-frontend-ingress` in namespace `lab-6-7` that allows ingress to `tier=frontend` pods on TCP port 80 from any source.
+
+4. **Task**: Create a NetworkPolicy named `allow-frontend-to-backend` in namespace `lab-6-7` that allows:
+   - Egress from `tier=frontend` to `tier=backend` on TCP port 8080
+   - Ingress to `tier=backend` from `tier=frontend` on TCP port 8080
+
+5. **Task**: Create a NetworkPolicy named `allow-backend-to-database` in namespace `lab-6-7` that allows:
+   - Egress from `tier=backend` to `tier=database` on TCP port 5432
+   - Ingress to `tier=database` from `tier=backend` on TCP port 5432
+
+6. **Task**: Create a NetworkPolicy named `allow-dns` in namespace `lab-6-7` that allows egress to `kube-system` namespace on UDP/TCP port 53 for all pods.
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

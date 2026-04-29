@@ -29,15 +29,25 @@ Pods in your cluster can access the cloud provider's instance metadata API (169.
 2. Create a NetworkPolicy `block-metadata` that denies egress to `169.254.169.254/32` on port 80 and 443 for all pods in the namespace
 3. Create a pod `test-pod` in the namespace to demonstrate the policy applies
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-1-7`.
+
+2. **Task**: Create a NetworkPolicy named `block-metadata` in namespace `lab-1-7` that:
+   - Applies to **all pods** (`podSelector: {}`)
+   - Sets `policyTypes: [Egress]`
+   - Allows egress to `0.0.0.0/0` **except** `169.254.169.254/32` (the cloud metadata endpoint)
+   - Allows egress to `kube-system` namespace on UDP/TCP port `53` for DNS
+
+3. **Task**: Create a Pod named `test-pod` in namespace `lab-1-7` with label `app=test` using image `nginx:1.25`.
+
+4. **Verify**: Run `./verify.sh` — all checks must pass.
+
+> **Why this matters**: The cloud instance metadata API at `169.254.169.254` can expose IAM credentials. A compromised pod could steal node credentials via this endpoint.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Create the metadata blocking NetworkPolicy
 
 ```bash
 cat <<EOF | kubectl apply -f -

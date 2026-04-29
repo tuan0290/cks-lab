@@ -36,6 +36,37 @@ Your security policy requires that all production containers run with immutable 
 6. Create a Falco rule to detect write attempts to read-only filesystems
 7. Apply the immutability configuration to a Deployment
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-6-9`.
+
+2. **Task**: Create a Pod named `immutable-pod` in namespace `lab-6-9` using image `nginx:1.25` with:
+   - `securityContext.readOnlyRootFilesystem: true`
+   - `securityContext.runAsNonRoot: true`, `runAsUser: 101`
+   - `securityContext.allowPrivilegeEscalation: false`
+   - `securityContext.capabilities.drop: [ALL]`, `add: [NET_BIND_SERVICE]`
+   - `emptyDir` volumes mounted at `/tmp`, `/var/cache/nginx`, `/var/run`
+
+3. **Task**: Verify the root filesystem is read-only:
+   ```bash
+   kubectl exec immutable-pod -n lab-6-9 -- touch /test-file 2>&1
+   # Expected: touch: /test-file: Read-only file system
+   ```
+
+4. **Task**: Verify writable volumes work:
+   ```bash
+   kubectl exec immutable-pod -n lab-6-9 -- touch /tmp/test-file
+   # Expected: success (no error)
+   ```
+
+5. **Task**: Create a Deployment named `immutable-deployment` in namespace `lab-6-9` with 2 replicas applying the same immutability settings.
+
+6. **Task**: Create a ConfigMap named `falco-immutability-rule` in namespace `lab-6-9` with a Falco rule that detects writes to container root filesystems (excluding `/tmp`, `/var/cache`, `/var/run`).
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

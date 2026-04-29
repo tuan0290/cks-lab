@@ -27,8 +27,41 @@ trivy image nginx:1.21
 
 ## Requirements
 
-1. Execute the necessary commands to configure Trivy - Quét lỗ hổng image
-2. Verify the configuration is working correctly
+1. Create namespace `lab-4-2`
+2. Scan `nginx:1.25` with Trivy for HIGH and CRITICAL vulnerabilities
+3. Scan `nginx:1.21` and compare results with `nginx:1.25`
+4. Create a ConfigMap `trivy-scan-results` with the scan summary
+5. Create a Deployment with scan annotations
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-4-2`.
+
+2. **Task**: Scan `nginx:1.25` for HIGH and CRITICAL vulnerabilities:
+   ```bash
+   trivy image --severity HIGH,CRITICAL nginx:1.25
+   ```
+   Note the total count of HIGH and CRITICAL findings.
+
+3. **Task**: Scan `nginx:1.21` and compare:
+   ```bash
+   trivy image --severity HIGH,CRITICAL --exit-code 1 nginx:1.21 || echo "Vulnerabilities found"
+   ```
+
+4. **Task**: Create a ConfigMap named `trivy-scan-results` in namespace `lab-4-2` with:
+   - Key `image`: `nginx:1.25`
+   - Key `scan-date`: current UTC timestamp
+   - Key `severity-filter`: `HIGH,CRITICAL`
+   - Key `status`: `passed` or `failed`
+
+5. **Task**: Create a Deployment named `scanned-app` in namespace `lab-4-2` using image `nginx:1.25` with pod template annotations:
+   - `security.scan/tool: trivy`
+   - `security.scan/status: passed`
+   - `security.scan/critical-count: "0"`
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

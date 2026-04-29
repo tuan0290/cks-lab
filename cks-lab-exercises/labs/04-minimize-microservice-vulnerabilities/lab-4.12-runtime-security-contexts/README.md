@@ -31,15 +31,37 @@ Your microservices need runtime security monitoring. You need to configure immut
 3. Create a ConfigMap `falco-microservice-rules` with Falco rules for microservice monitoring
 4. Create a ConfigMap `runtime-security-policy` documenting the runtime security approach
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-4-12`.
+
+2. **Task**: Create a Deployment named `immutable-app` in namespace `lab-4-12` with 2 replicas using image `nginx:1.25` where every container has:
+   - `readOnlyRootFilesystem: true`
+   - `allowPrivilegeEscalation: false`
+   - `capabilities.drop: [ALL]`
+   - `securityContext.runAsNonRoot: true`, `runAsUser: 1000`
+   - `securityContext.seccompProfile.type: RuntimeDefault`
+   - Mount `emptyDir` volumes for `/tmp`, `/var/cache/nginx`, `/var/run`
+
+3. **Task**: Create a ConfigMap named `falco-microservice-rules` in namespace `lab-4-12` containing Falco rules YAML for detecting:
+   - Shell spawning in microservice containers
+   - Writes to immutable container filesystem
+   - Unexpected outbound connections
+
+4. **Task**: Create a ConfigMap named `runtime-security-policy` in namespace `lab-4-12` documenting the runtime security policy including immutability requirements, monitoring requirements, and incident response procedures.
+
+5. **Task**: Verify the deployment has `readOnlyRootFilesystem: true`:
+   ```bash
+   kubectl get deployment immutable-app -n lab-4-12 \
+     -o jsonpath='{.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem}'
+   # Expected: true
+   ```
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Create the immutable application deployment
 
 ```bash
 cat <<EOF | kubectl apply -f -

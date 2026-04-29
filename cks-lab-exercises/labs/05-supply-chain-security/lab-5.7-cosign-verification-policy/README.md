@@ -31,6 +31,31 @@ Your organization requires that all container images deployed to production must
 4. Test that unsigned images are blocked by the policy
 5. Create a deployment with a properly annotated image reference
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-5-7`.
+
+2. **Task**: Generate a Cosign key pair:
+   ```bash
+   COSIGN_PASSWORD="" cosign generate-key-pair
+   ```
+
+3. **Task**: Store the public key in a ConfigMap named `cosign-public-key` in namespace `lab-5-7`:
+   ```bash
+   kubectl create configmap cosign-public-key \
+     --from-file=cosign.pub=./cosign.pub -n lab-5-7
+   ```
+
+4. **Task**: Create a Kyverno `ClusterPolicy` named `verify-image-signatures` in `Audit` mode with a `verifyImages` rule for namespace `lab-5-7` that requires images to be signed with the key from `cosign-public-key`.
+
+5. **Task**: Create a Kyverno `ClusterPolicy` named `audit-image-signatures` in `Audit` mode that checks all images in namespace `lab-5-7` for Cosign signatures.
+
+6. **Task**: Create a Deployment named `verified-app` in namespace `lab-5-7` using image `gcr.io/distroless/static-debian12:nonroot` with annotation `security.cosign/verified: "true"`.
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

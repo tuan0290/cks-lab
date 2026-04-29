@@ -45,8 +45,38 @@ spec:
 
 ## Requirements
 
-1. Create and apply the required Kubernetes manifests
-2. Verify the configuration is working correctly
+1. Create namespace `lab-3-3`
+2. Create a Pod `drop-all-pod` that drops ALL capabilities and adds only `NET_BIND_SERVICE`
+3. Create a Pod `privileged-pod` with `privileged: true` to demonstrate the risk
+4. Verify capabilities using `kubectl exec`
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-3-3`.
+
+2. **Task**: Create a Pod named `drop-all-pod` in namespace `lab-3-3` using image `nginx:1.25` with:
+   - `securityContext.runAsNonRoot: true`
+   - `securityContext.runAsUser: 1000`
+   - `containers[0].securityContext.allowPrivilegeEscalation: false`
+   - `containers[0].securityContext.capabilities.drop: [ALL]`
+   - `containers[0].securityContext.capabilities.add: [NET_BIND_SERVICE]`
+
+3. **Task**: Create a Pod named `no-caps-pod` in namespace `lab-3-3` using image `busybox:1.36` with:
+   - `containers[0].securityContext.capabilities.drop: [ALL]`
+   - `containers[0].securityContext.allowPrivilegeEscalation: false`
+   - Command: `["sleep", "3600"]`
+
+4. **Task**: Verify the capabilities on `drop-all-pod`:
+   ```bash
+   kubectl exec drop-all-pod -n lab-3-3 -- cat /proc/1/status | grep Cap
+   # CapEff should show only NET_BIND_SERVICE bit set
+   ```
+
+5. **Task**: Create a ConfigMap named `capabilities-reference` in namespace `lab-3-3` listing at least 5 dangerous capabilities that should always be dropped (e.g., `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, `CAP_SYS_PTRACE`, `CAP_DAC_OVERRIDE`, `CAP_SETUID`).
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

@@ -31,6 +31,26 @@ Your security team has identified that several production workloads are using fu
 4. Verify the image does not contain a shell (`/bin/sh` or `/bin/bash`)
 5. Configure the pod with appropriate security context settings
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-5-5`.
+
+2. **Task**: Create a Deployment named `distroless-app` in namespace `lab-5-5` using image `gcr.io/distroless/static-debian12:nonroot` with:
+   - `runAsNonRoot: true`, `runAsUser: 65534`, `runAsGroup: 65534`
+   - `readOnlyRootFilesystem: true`
+   - `allowPrivilegeEscalation: false`
+   - `capabilities.drop: [ALL]`
+
+3. **Task**: Create a ConfigMap named `multistage-dockerfile` in namespace `lab-5-5` with a Dockerfile key showing a multi-stage build (builder stage + distroless final stage).
+
+4. **Task**: Create a Pod named `minimal-alpine-pod` in namespace `lab-5-5` using image `alpine:3.19` with `readOnlyRootFilesystem: true`, `runAsNonRoot: true`, `runAsUser: 1000`, `capabilities.drop: [ALL]`, and an `emptyDir` volume at `/tmp`.
+
+5. **Task**: Create a Kyverno ClusterPolicy named `restrict-base-images` in Audit mode that only allows images from `gcr.io/distroless/*` or `alpine:*` in namespace `lab-5-5`.
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

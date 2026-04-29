@@ -27,10 +27,48 @@
 
 ## Requirements
 
-1. Execute the necessary commands to configure AppArmor Configuration
-2. Create and apply the required Kubernetes manifests
-3. Verify the configuration is working correctly
-4. Document any troubleshooting steps you performed
+1. Create namespace `lab-3-2`
+2. Create an AppArmor profile `k8s-nginx-apparmor` and load it on the node
+3. Create a Pod `apparmor-pod` with the AppArmor profile applied via annotation
+4. Verify the profile is enforced
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-3-2`.
+
+2. **Task**: Create an AppArmor profile file at `/etc/apparmor.d/k8s-nginx-apparmor` on the node:
+   ```
+   profile k8s-nginx-apparmor flags=(attach_disconnected) {
+     #include <abstractions/base>
+     file,
+     network,
+     deny /etc/shadow r,
+     deny /proc/sys/kernel/** w,
+   }
+   ```
+   Load the profile: `apparmor_parser -r /etc/apparmor.d/k8s-nginx-apparmor`
+
+3. **Task**: Verify the profile is loaded:
+   ```bash
+   aa-status | grep k8s-nginx-apparmor
+   ```
+
+4. **Task**: Create a Pod named `apparmor-pod` in namespace `lab-3-2` using image `nginx:1.25` with the AppArmor annotation:
+   ```yaml
+   metadata:
+     annotations:
+       container.apparmor.security.beta.kubernetes.io/nginx: localhost/k8s-nginx-apparmor
+   ```
+
+5. **Task**: Verify the AppArmor profile is active on the running pod:
+   ```bash
+   kubectl exec apparmor-pod -n lab-3-2 -- cat /proc/1/attr/current
+   # Expected: k8s-nginx-apparmor (enforce)
+   ```
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

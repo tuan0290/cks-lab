@@ -30,6 +30,31 @@ You need to verify that the NodeRestriction admission controller is properly con
 3. Apply a label `security-zone=production` to a node (as cluster admin — this is allowed)
 4. Create a ConfigMap `node-labels-test` documenting which labels kubelets cannot set
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-2-9`.
+
+2. **Task**: Get the name of the first node and apply label `security-zone=production` to it:
+   ```bash
+   NODE=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
+   kubectl label node "$NODE" security-zone=production --overwrite
+   kubectl get node "$NODE" --show-labels | grep security-zone
+   ```
+
+3. **Task**: Create a ConfigMap named `node-restriction-config` in namespace `lab-2-9` documenting:
+   - What the NodeRestriction admission controller prevents kubelets from doing
+   - Which label prefixes are restricted (`node-restriction.kubernetes.io/`)
+   - Why this matters for security (privilege escalation via labels)
+
+4. **Task**: Create a ConfigMap named `node-labels-test` in namespace `lab-2-9` documenting:
+   - Labels a cluster admin CAN set (any label)
+   - Labels a kubelet CANNOT set (e.g., `node-restriction.kubernetes.io/*`)
+   - The test result from step 2
+
+5. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

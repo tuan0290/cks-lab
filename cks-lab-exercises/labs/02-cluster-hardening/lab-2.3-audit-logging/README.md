@@ -36,9 +36,41 @@ rules:
 
 ## Requirements
 
-1. Execute the necessary commands to configure Cấu hình Audit Log
-2. Create and apply the required Kubernetes manifests
-3. Verify the configuration is working correctly
+1. Create namespace `lab-2-3`
+2. Create an audit policy file at `/etc/kubernetes/audit-policy.yaml` with rules for Secrets, Deployments, and catch-all Metadata
+3. Configure kube-apiserver with `--audit-log-path`, `--audit-policy-file`, `--audit-log-maxage=30`
+4. Create a ConfigMap `audit-policy-summary` documenting the policy rules
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-2-3`.
+
+2. **Task**: Create the file `/etc/kubernetes/audit-policy.yaml` with the following rules:
+   - `RequestResponse` level for `create/update/delete/patch` on `secrets`
+   - `Request` level for `get/list` on `secrets`
+   - `RequestResponse` level for `create/update/delete/patch` on `deployments` (apps group)
+   - `Metadata` level for all other resources
+   - `None` level for node `get/list` on `events` (reduce noise)
+
+3. **Task**: Edit `/etc/kubernetes/manifests/kube-apiserver.yaml` to add these flags:
+   ```
+   --audit-log-path=/var/log/kubernetes/audit.log
+   --audit-policy-file=/etc/kubernetes/audit-policy.yaml
+   --audit-log-maxage=30
+   --audit-log-maxbackup=10
+   --audit-log-maxsize=100
+   ```
+
+4. **Task**: After the kube-apiserver restarts, create a Secret named `audit-test-secret` in namespace `lab-2-3` and verify an audit log entry is generated:
+   ```bash
+   grep "audit-test-secret" /var/log/kubernetes/audit.log | tail -1
+   ```
+
+5. **Task**: Create a ConfigMap named `audit-policy-summary` in namespace `lab-2-3` documenting the 5 audit rules you configured.
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

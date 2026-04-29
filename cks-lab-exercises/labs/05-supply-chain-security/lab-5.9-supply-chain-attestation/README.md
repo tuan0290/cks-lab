@@ -32,6 +32,33 @@ Your organization is implementing SLSA Level 2 compliance for its container buil
 5. Create a Deployment `attested-app` with SLSA compliance annotations
 6. Create a ConfigMap demonstrating an in-toto attestation structure
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-5-9`.
+
+2. **Task**: Generate a Cosign key pair for attestation signing:
+   ```bash
+   COSIGN_PASSWORD="" cosign generate-key-pair
+   ```
+
+3. **Task**: Create a ConfigMap named `slsa-policy-config` in namespace `lab-5-9` with:
+   - `slsa-level: "2"`
+   - `required-builder: https://github.com/actions/runner`
+   - `attestation-type: https://slsa.dev/provenance/v0.2`
+   - `verify-provenance: "true"`
+
+4. **Task**: Create a ConfigMap named `intoto-attestation-example` in namespace `lab-5-9` with an `attestation.json` key containing a valid in-toto statement structure with `_type`, `predicateType`, `subject`, and `predicate` fields.
+
+5. **Task**: Create a Kyverno ClusterPolicy named `verify-slsa-attestation` in Audit mode with a `verifyImages` rule that checks for SLSA provenance attestations in namespace `lab-5-9`.
+
+6. **Task**: Create a Deployment named `attested-app` in namespace `lab-5-9` using image `gcr.io/distroless/static-debian12:nonroot` with annotations:
+   - `security.slsa/level: "2"`
+   - `security.cosign/attestation-type: https://slsa.dev/provenance/v0.2`
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

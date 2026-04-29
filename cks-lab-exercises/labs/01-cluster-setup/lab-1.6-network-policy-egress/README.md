@@ -35,15 +35,26 @@ A backend service in your cluster should only be allowed to communicate with a s
    - Allows egress to pods with label `app=database` on port 5432
    - Allows egress to kube-dns on UDP port 53
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-1-6` with label `env=lab`.
+
+2. **Task**: Create a Pod named `backend` in namespace `lab-1-6` with label `app=backend` using image `nginx:1.25`.
+
+3. **Task**: Create a Pod named `database` in namespace `lab-1-6` with label `app=database` using image `nginx:1.25`.
+
+4. **Task**: Create a NetworkPolicy named `backend-egress` in namespace `lab-1-6` that:
+   - Applies to pods with label `app=backend`
+   - Sets `policyTypes: [Egress]`
+   - Allows egress **only** to pods with label `app=database` on TCP port `5432`
+   - Allows egress to `kube-system` namespace on UDP/TCP port `53` (DNS)
+   - Blocks all other outbound traffic
+
+5. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Create the backend and database pods
 
 ```bash
 cat <<EOF | kubectl apply -f -

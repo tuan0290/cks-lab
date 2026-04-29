@@ -27,8 +27,42 @@ go install github.com/anchore/syft/cmd/syft@latest
 
 ## Requirements
 
-1. Execute the necessary commands to configure SBOM với Syft
-2. Verify the configuration is working correctly
+1. Create namespace `lab-5-4`
+2. Generate an SBOM for `nginx:1.25` in CycloneDX JSON format using Syft
+3. Generate an SBOM in SPDX format
+4. Store the SBOM summary in a ConfigMap
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-5-4`.
+
+2. **Task**: Generate an SBOM for `nginx:1.25` in CycloneDX JSON format:
+   ```bash
+   syft nginx:1.25 -o cyclonedx-json > /tmp/nginx-sbom-cyclonedx.json
+   ```
+
+3. **Task**: Generate an SBOM in SPDX format:
+   ```bash
+   syft nginx:1.25 -o spdx-json > /tmp/nginx-sbom-spdx.json
+   ```
+
+4. **Task**: Count the number of packages in the SBOM:
+   ```bash
+   cat /tmp/nginx-sbom-cyclonedx.json | python3 -c \
+     "import sys,json; d=json.load(sys.stdin); print(len(d.get('components',[])))"
+   ```
+
+5. **Task**: Create a ConfigMap named `sbom-summary` in namespace `lab-5-4` with:
+   - `image: nginx:1.25`
+   - `sbom-format: CycloneDX,SPDX`
+   - `package-count: <number from step 4>`
+   - `tool: syft`
+
+6. **Task**: Create a ConfigMap named `sbom-policy` in namespace `lab-5-4` documenting why SBOMs are important for supply chain security and how they relate to vulnerability scanning.
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

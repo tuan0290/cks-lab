@@ -35,6 +35,29 @@ Your organization needs a comprehensive supply chain security enforcement system
 4. Create a deployment `compliant-app` that passes all supply chain checks
 5. Create a ConfigMap `supply-chain-config` with the enforcement configuration
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-5-12`.
+
+2. **Task**: Create a ConfigMap named `supply-chain-config` in namespace `lab-5-12` with keys: `approved-registries`, `require-scan-annotation: "true"`, `require-non-root: "true"`, `enforcement-mode: audit`.
+
+3. **Task**: Create a Kyverno ClusterPolicy named `supply-chain-validate` in Audit mode with 3 rules for pods in namespace `lab-5-12`:
+   - Rule 1: Images must be from `gcr.io/*` or `docker.io/library/*`
+   - Rule 2: Pod must have annotation `security.scan/status`
+   - Rule 3: Pod must have `securityContext.runAsNonRoot: true`
+
+4. **Task**: Create a Kyverno ClusterPolicy named `supply-chain-mutate` that automatically adds label `security.supply-chain/enforced: "true"` to all pods in namespace `lab-5-12`.
+
+5. **Task**: Create a Deployment named `compliant-app` in namespace `lab-5-12` using image `gcr.io/distroless/static-debian12:nonroot` with:
+   - Pod template annotation `security.scan/status: passed`
+   - `runAsNonRoot: true`, `runAsUser: 65534`
+   - `readOnlyRootFilesystem: true`
+   - `capabilities.drop: [ALL]`
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

@@ -30,15 +30,31 @@ Your microservices need encrypted communication between pods. You need to implem
 3. Create a Secret `service-tls` with a self-signed certificate for service communication
 4. Create a Pod `tls-server` that uses the TLS secret
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-4-9`.
+
+2. **Task**: Generate a self-signed TLS certificate for `tls-server.lab-4-9.svc.cluster.local`:
+   ```bash
+   openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+     -keyout /tmp/service.key -out /tmp/service.crt \
+     -subj "/CN=tls-server.lab-4-9.svc.cluster.local"
+   ```
+
+3. **Task**: Create a TLS Secret named `service-tls` in namespace `lab-4-9` from the generated certificate.
+
+4. **Task**: Create a Pod named `tls-server` in namespace `lab-4-9` that mounts the `service-tls` secret as a volume at `/etc/tls` with `defaultMode: 0400`.
+
+5. **Task**: Create a ConfigMap named `mtls-config` in namespace `lab-4-9` documenting 3 approaches to pod-to-pod encryption:
+   - Istio service mesh with `PeerAuthentication: STRICT`
+   - cert-manager with manual TLS
+   - Cilium with IPsec/WireGuard
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Create namespace with mTLS annotation
 
 ```bash
 cat <<EOF | kubectl apply -f -

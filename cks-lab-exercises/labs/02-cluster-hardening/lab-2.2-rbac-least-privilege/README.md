@@ -45,9 +45,39 @@ apiVersion: rbac.authorization.k8s.i
 
 ## Requirements
 
-1. Execute the necessary commands to configure RBAC - Nguyên tắc Tối Thiểu Đặc Quyền
-2. Create and apply the required Kubernetes manifests
-3. Verify the configuration is working correctly
+1. Create namespace `lab-2-2` with label `security=rbac`
+2. Create a ServiceAccount `deployment-reader` in namespace `lab-2-2`
+3. Create a Role `deployment-reader-role` allowing only `get` and `list` on `deployments` and `pods`
+4. Bind the Role to the ServiceAccount via a RoleBinding
+5. Verify permissions using `kubectl auth can-i`
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-2-2` with label `security=rbac`.
+
+2. **Task**: Create a ServiceAccount named `deployment-reader` in namespace `lab-2-2` with `automountServiceAccountToken: false`.
+
+3. **Task**: Create a Role named `deployment-reader-role` in namespace `lab-2-2` that allows:
+   - `get`, `list` on `deployments` (apiGroup: `apps`)
+   - `get`, `list` on `pods` (apiGroup: `""`)
+   - **No** `create`, `update`, `delete`, or `patch` verbs
+
+4. **Task**: Create a RoleBinding named `deployment-reader-binding` in namespace `lab-2-2` that binds `deployment-reader-role` to ServiceAccount `deployment-reader`.
+
+5. **Task**: Verify the permissions are correct:
+   ```bash
+   # Should return "yes"
+   kubectl auth can-i list deployments -n lab-2-2 \
+     --as=system:serviceaccount:lab-2-2:deployment-reader
+   
+   # Should return "no"
+   kubectl auth can-i delete deployments -n lab-2-2 \
+     --as=system:serviceaccount:lab-2-2:deployment-reader
+   ```
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

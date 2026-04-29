@@ -47,6 +47,38 @@ The attack scenarios include:
 5. Analyze audit logs to identify the attack timeline using jq
 6. Document the incident response steps taken
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-6-8`.
+
+2. **Task**: Create a ConfigMap named `threat-detection-rules` in namespace `falco` with Falco rules for:
+   - **Shell spawning**: detect `proc.name in (shell_binaries)` inside containers
+   - **API reconnaissance**: detect `proc.name in (kubectl, curl, wget)` accessing the Kubernetes API from containers
+   - **Crypto mining**: detect processes with high CPU usage patterns (`proc.name in (xmrig, minerd, cryptonight)`)
+
+3. **Task**: Create a Pod named `attack-simulator` in namespace `lab-6-8` using image `alpine:3.19` with command `["sleep", "3600"]`.
+
+4. **Task**: Simulate attack scenarios:
+   ```bash
+   # Scenario A: Shell spawning
+   kubectl exec attack-simulator -n lab-6-8 -- sh -c "id && whoami"
+   
+   # Scenario B: Sensitive file access
+   kubectl exec attack-simulator -n lab-6-8 -- cat /etc/passwd
+   ```
+
+5. **Task**: Create a ConfigMap named `incident-response-plan` in namespace `lab-6-8` documenting:
+   - How to isolate a compromised pod (NetworkPolicy or label change)
+   - How to capture forensic evidence (`kubectl exec` logs, audit logs)
+   - How to quarantine: `kubectl label pod <pod> quarantine=true`
+   - Escalation procedure
+
+6. **Task**: Create a ConfigMap named `attack-timeline` in namespace `lab-6-8` documenting the simulated attack timeline with timestamps.
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

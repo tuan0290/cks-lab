@@ -34,9 +34,37 @@
 
 ## Requirements
 
-1. Execute the necessary commands to configure Cấu hình API Server Security
-2. Verify the configuration is working correctly
-3. Document any troubleshooting steps you performed
+1. Create namespace `lab-2-1` with label `security=api-server`
+2. Audit the current kube-apiserver flags and document findings
+3. Create a ConfigMap `apiserver-security-audit` documenting current vs recommended flags
+4. Create a ConfigMap `apiserver-hardening-plan` with specific remediation steps
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-2-1` with label `security=api-server`.
+
+2. **Task**: Inspect the current kube-apiserver configuration:
+   ```bash
+   cat /etc/kubernetes/manifests/kube-apiserver.yaml | grep -E "\-\-"
+   ```
+   Identify which of these security flags are present or missing:
+   - `--anonymous-auth=false`
+   - `--authorization-mode=Node,RBAC`
+   - `--enable-admission-plugins=NodeRestriction`
+   - `--audit-log-path`
+   - `--profiling=false`
+
+3. **Task**: Create a ConfigMap named `apiserver-security-audit` in namespace `lab-2-1` with:
+   - Key `anonymous-auth`: current value (true/false)
+   - Key `authorization-mode`: current value
+   - Key `admission-plugins`: current enabled plugins
+   - Key `audit-logging`: enabled or disabled
+
+4. **Task**: Create a ConfigMap named `apiserver-hardening-plan` in namespace `lab-2-1` documenting at least 4 recommended flags with their values and the security reason for each.
+
+5. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

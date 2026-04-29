@@ -34,6 +34,43 @@ Your security team has identified that containers in the cluster may be attempti
 4. Verify that Falco generates alerts when a container accesses sensitive files
 5. The rule output must include: user name, process command line, and file name
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-6-5`.
+
+2. **Task**: Create a ConfigMap named `falco-file-access-rules` in namespace `falco` with a `rules.yaml` key containing:
+   ```yaml
+   - rule: Sensitive File Access in Container
+     desc: Detect reads of sensitive files from containers
+     condition: >
+       open_read and container and
+       fd.name in (/etc/shadow, /etc/passwd, /etc/sudoers, /root/.ssh/authorized_keys) and
+       not proc.name in (sshd, login, systemd-logind, passwd)
+     output: >
+       Sensitive file read in container
+       (user=%user.name cmd=%proc.cmdline file=%fd.name
+       pod=%k8s.pod.name ns=%k8s.ns.name)
+     priority: ERROR
+     tags: [filesystem, sensitive, container]
+   ```
+
+3. **Task**: Create a Pod named `file-access-test` in namespace `lab-6-5` using image `alpine:3.19` with command `["sleep", "3600"]`.
+
+4. **Task**: Trigger the Falco rule by accessing a sensitive file from the test pod:
+   ```bash
+   kubectl exec file-access-test -n lab-6-5 -- cat /etc/passwd
+   ```
+   Then verify Falco logged the alert:
+   ```bash
+   kubectl logs -n falco -l app.kubernetes.io/name=falco --tail=20 | grep "Sensitive file"
+   ```
+
+5. **Task**: Create a ConfigMap named `file-access-test-results` in namespace `lab-6-5` documenting the alert output from Falco.
+
+6. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

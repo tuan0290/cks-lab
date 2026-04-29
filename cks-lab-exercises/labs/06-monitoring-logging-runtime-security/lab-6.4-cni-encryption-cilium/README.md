@@ -44,10 +44,49 @@ data:
 
 ## Requirements
 
-1. Execute the necessary commands to configure CNI Network Encryption (Cilium IPsec)
-2. Create and apply the required Kubernetes manifests
-3. Verify the configuration is working correctly
-4. Document any troubleshooting steps you performed
+1. Create namespace `lab-6-4`
+2. Install Cilium with IPsec encryption enabled
+3. Generate and apply IPsec keys
+4. Verify pod-to-pod traffic is encrypted
+5. Create documentation ConfigMaps
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-6-4`.
+
+2. **Task**: Install Cilium with IPsec encryption (if not already installed):
+   ```bash
+   helm repo add cilium https://helm.cilium.io/
+   helm install cilium cilium/cilium \
+     --namespace kube-system \
+     --set encryption.enabled=true \
+     --set encryption.type=ipsec
+   ```
+
+3. **Task**: Generate and apply IPsec keys:
+   ```bash
+   # Generate a random IPsec key
+   kubectl create secret generic cilium-ipsec-keys \
+     --from-literal=keys="3 rfc4106(gcm(aes)) $(dd if=/dev/urandom count=20 bs=1 2>/dev/null | xxd -p -c 64) 128" \
+     -n kube-system
+   ```
+
+4. **Task**: Verify Cilium encryption is active:
+   ```bash
+   kubectl -n kube-system exec ds/cilium -- cilium encrypt status
+   ```
+
+5. **Task**: Create a ConfigMap named `cilium-encryption-config` in namespace `lab-6-4` documenting:
+   - Encryption type: IPsec
+   - Key rotation procedure
+   - How to verify encryption is active
+   - Difference between IPsec and WireGuard in Cilium
+
+6. **Task**: Create a ConfigMap named `encryption-test-results` in namespace `lab-6-4` documenting the verification results.
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

@@ -28,9 +28,47 @@ go install github.com/sigstore/cosign/v2/cmd/cosign@latest
 
 ## Requirements
 
-1. Execute the necessary commands to configure Cosign — Ký và Xác thực Image
-2. Verify the configuration is working correctly
-3. Document any troubleshooting steps you performed
+1. Create namespace `lab-5-1`
+2. Generate a Cosign key pair (`cosign.key` and `cosign.pub`)
+3. Sign a container image using the private key
+4. Verify the signature using the public key
+5. Store the public key in a ConfigMap
+
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-5-1`.
+
+2. **Task**: Generate a Cosign key pair (set `COSIGN_PASSWORD=""` for no password in lab):
+   ```bash
+   COSIGN_PASSWORD="" cosign generate-key-pair
+   # Creates cosign.key (private) and cosign.pub (public)
+   ```
+
+3. **Task**: Sign a container image using the private key:
+   ```bash
+   COSIGN_PASSWORD="" cosign sign --key cosign.key \
+     --annotations "signed-by=lab-user" \
+     --annotations "environment=lab" \
+     ttl.sh/cks-lab-test:1h
+   ```
+
+4. **Task**: Verify the signature using the public key:
+   ```bash
+   cosign verify --key cosign.pub ttl.sh/cks-lab-test:1h
+   ```
+
+5. **Task**: Store the public key in a ConfigMap named `cosign-public-key` in namespace `lab-5-1`:
+   ```bash
+   kubectl create configmap cosign-public-key \
+     --from-file=cosign.pub=./cosign.pub \
+     -n lab-5-1
+   ```
+
+6. **Task**: Create a ConfigMap named `signing-procedure` in namespace `lab-5-1` documenting the key generation, signing, and verification steps.
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
 
 ## Instructions
 

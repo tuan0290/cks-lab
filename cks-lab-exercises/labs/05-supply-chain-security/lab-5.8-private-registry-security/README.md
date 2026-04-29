@@ -31,6 +31,36 @@ Your organization has set up a private container registry to control which image
 5. Create a deployment `private-registry-app` that uses the private registry credentials
 6. Verify that pods without proper registry credentials are blocked
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-5-8`.
+
+2. **Task**: Create an `imagePullSecret` named `registry-credentials` in namespace `lab-5-8`:
+   ```bash
+   kubectl create secret docker-registry registry-credentials \
+     --docker-server=registry.example.com \
+     --docker-username=lab-user \
+     --docker-password=lab-password-secure \
+     --docker-email=lab@example.com \
+     -n lab-5-8
+   ```
+
+3. **Task**: Patch the `default` ServiceAccount in namespace `lab-5-8` to automatically use `registry-credentials`:
+   ```bash
+   kubectl patch serviceaccount default -n lab-5-8 \
+     -p '{"imagePullSecrets": [{"name": "registry-credentials"}]}'
+   ```
+
+4. **Task**: Create a Kyverno ClusterPolicy named `restrict-image-registries` in Audit mode that only allows images from `registry.example.com/*` or `gcr.io/distroless/*` in namespace `lab-5-8`.
+
+5. **Task**: Create a Deployment named `private-registry-app` in namespace `lab-5-8` using image `gcr.io/distroless/static-debian12:nonroot` with `imagePullSecrets: [{name: registry-credentials}]`.
+
+6. **Task**: Create a ServiceAccount named `app-service-account` in namespace `lab-5-8` with `imagePullSecrets: [{name: registry-credentials}]`.
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

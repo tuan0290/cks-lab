@@ -30,15 +30,29 @@ A security review found that several pods in your cluster are using host namespa
 3. Create a Kyverno ClusterPolicy `restrict-host-access` that blocks hostPID, hostIPC, hostNetwork
 4. Create a ConfigMap `host-footprint-checklist` documenting host hardening steps
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-3-5`.
+
+2. **Task**: Create a Pod named `secure-pod` in namespace `lab-3-5` with all host namespace access explicitly disabled:
+   - `spec.hostPID: false`
+   - `spec.hostIPC: false`
+   - `spec.hostNetwork: false`
+   - `securityContext.runAsNonRoot: true`, `runAsUser: 1000`
+   - `securityContext.seccompProfile.type: RuntimeDefault`
+   - `containers[0].securityContext.allowPrivilegeEscalation: false`
+   - `containers[0].securityContext.readOnlyRootFilesystem: true`
+   - `containers[0].securityContext.capabilities.drop: [ALL]`
+
+3. **Task**: Create a Kyverno ClusterPolicy named `restrict-host-access` in Audit mode that blocks pods in namespace `lab-3-5` from using `hostPID: true`, `hostIPC: true`, or `hostNetwork: true`.
+
+4. **Task**: Create a ConfigMap named `host-footprint-checklist` in namespace `lab-3-5` with a checklist of at least 8 host OS hardening steps (node-level and pod-level).
+
+5. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Create a secure pod with no host access
 
 ```bash
 cat <<EOF | kubectl apply -f -

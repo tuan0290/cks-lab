@@ -31,15 +31,32 @@ You have a 3-tier application (frontend, backend, database) and need to implemen
 4. Create NetworkPolicy `allow-frontend-to-backend` allowing frontend → backend on port 8080
 5. Create NetworkPolicy `allow-backend-to-database` allowing backend → database on port 5432
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-4-6`.
+
+2. **Task**: Create three Pods in namespace `lab-4-6`:
+   - `frontend` with label `tier=frontend`
+   - `backend` with label `tier=backend`
+   - `database` with label `tier=database`
+
+3. **Task**: Create a NetworkPolicy named `default-deny` in namespace `lab-4-6` that denies **all** ingress and egress for all pods (`podSelector: {}`, `policyTypes: [Ingress, Egress]`).
+
+4. **Task**: Create a NetworkPolicy named `allow-frontend-to-backend` in namespace `lab-4-6` that allows ingress to pods with `tier=backend` **only** from pods with `tier=frontend` on TCP port `8080`.
+
+5. **Task**: Create a NetworkPolicy named `allow-backend-to-database` in namespace `lab-4-6` that allows ingress to pods with `tier=database` **only** from pods with `tier=backend` on TCP port `5432`.
+
+6. **Task**: Verify the policies are in place:
+   ```bash
+   kubectl get networkpolicies -n lab-4-6
+   # Should show: default-deny, allow-frontend-to-backend, allow-backend-to-database
+   ```
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Deploy the 3-tier application pods
 
 ```bash
 for tier in frontend backend database; do

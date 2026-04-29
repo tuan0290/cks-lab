@@ -44,6 +44,45 @@ A security alert has been triggered: a pod in the `production` namespace is exhi
 6. Verify the cluster is back to normal operation
 7. Create a post-incident Falco rule to detect similar future attacks
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-6-11` and run setup:
+   ```bash
+   ./setup.sh
+   ```
+
+2. **Task**: Identify the suspicious pod:
+   ```bash
+   kubectl get pods -n lab-6-11 --show-labels
+   kubectl describe pod <suspicious-pod> -n lab-6-11
+   ```
+
+3. **Task**: Isolate the compromised pod by creating a NetworkPolicy named `quarantine-policy` in namespace `lab-6-11` that blocks **all** ingress and egress for pods with label `quarantine=true`. Then label the suspicious pod:
+   ```bash
+   kubectl label pod <suspicious-pod> -n lab-6-11 quarantine=true
+   ```
+
+4. **Task**: Collect forensic evidence:
+   ```bash
+   # Capture running processes
+   kubectl exec <suspicious-pod> -n lab-6-11 -- ps aux > /tmp/forensics-processes.txt
+   # Capture environment variables (may contain stolen credentials)
+   kubectl exec <suspicious-pod> -n lab-6-11 -- env > /tmp/forensics-env.txt
+   ```
+
+5. **Task**: Create a ConfigMap named `incident-report` in namespace `lab-6-11` documenting:
+   - Incident timeline
+   - Affected resources
+   - Evidence collected
+   - Containment actions taken
+   - Recovery steps
+
+6. **Task**: Create a Falco rule ConfigMap named `post-incident-rules` in namespace `lab-6-11` to detect similar future attacks.
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
 
 ### Step 1: Set up the lab environment

@@ -31,15 +31,32 @@ Your organization requires all pods to have specific labels for cost tracking an
 4. Create a compliant Pod `labeled-pod` with the required label
 5. Create a ConfigMap `gatekeeper-policy-docs` documenting the policy
 
+## Questions
+
+> **Exam-style tasks** — Complete all tasks below before running `./verify.sh`
+
+1. **Task**: Create namespace `lab-4-7`.
+
+2. **Task**: Create a Kyverno `ConstraintTemplate` named `k8srequiredlabels` that enforces required labels on pods using Rego policy logic.
+
+3. **Task**: Create a Kyverno `Constraint` of kind `K8sRequiredLabels` named `require-app-label` that:
+   - Applies to Pods in namespace `lab-4-7`
+   - Requires the label `app` to be present
+   - Uses `enforcementAction: deny`
+
+4. **Task**: Create a Pod named `labeled-pod` in namespace `lab-4-7` with label `app: my-app` — this should be **allowed**.
+
+5. **Task**: Create a ConfigMap named `gatekeeper-policy-docs` in namespace `lab-4-7` documenting the policy purpose and enforcement action.
+
+6. **Task**: Attempt to create a Pod **without** the `app` label and confirm it is blocked:
+   ```bash
+   kubectl run unlabeled --image=nginx:1.25 -n lab-4-7
+   # Expected: Error - missing required label 'app'
+   ```
+
+7. **Verify**: Run `./verify.sh` — all checks must pass.
+
 ## Instructions
-
-### Step 1: Set up the lab environment
-
-```bash
-./setup.sh
-```
-
-### Step 2: Create the ConstraintTemplate
 
 ```bash
 cat <<EOF | kubectl apply -f -
