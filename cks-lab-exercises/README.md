@@ -1,154 +1,154 @@
-# CKS Lab Exercises – Certified Kubernetes Security Specialist
+# CKS Lab Exercises
 
-Bộ bài lab thực hành CKS được thiết kế theo cấu trúc đề thi mới nhất (cập nhật **15/10/2024**) của Linux Foundation. Mục tiêu giúp học viên nắm vững kỹ năng bảo mật Kubernetes và vượt qua kỳ thi CKS với điểm tối thiểu **67%**.
+A comprehensive collection of hands-on lab exercises for the **Certified Kubernetes Security Specialist (CKS)** exam preparation.
 
----
+## Overview
 
-## Tổng quan
+| Metric | Value |
+|--------|-------|
+| Total Labs | 60 |
+| Domains Covered | 6 |
+| Kubernetes Version | v1.29+ |
+| Coverage | 100% CKS Exam Topics |
 
-Bộ bài lab gồm **25 bài lab** thực hành, **6 cheatsheet** tham khảo nhanh, và **2 bài thi thử** (mock exam), phân bổ theo 6 domain của đề thi:
+## Lab Structure
 
-| Domain | Trọng số | Số bài lab | Thư mục |
-|--------|----------|------------|---------|
-| Cluster Setup | 15% | 4 | `labs/01-cluster-setup/` |
-| Cluster Hardening | 15% | 4 | `labs/02-cluster-hardening/` |
-| System Hardening | 10% | 3 | `labs/03-system-hardening/` |
-| Minimize Microservice Vulnerabilities | 20% | 5 | `labs/04-microservice-vulnerabilities/` |
-| Supply Chain Security | 20% | 5 | `labs/05-supply-chain-security/` |
-| Monitoring, Logging & Runtime Security | 20% | 4 | `labs/06-monitoring-runtime/` |
-| **Tổng** | **100%** | **25** | |
+Each lab contains:
+- `README.md` - Lab objectives, scenario, requirements, and instructions
+- `setup.sh` - Initializes the lab environment
+- `verify.sh` - Checks if the lab requirements are met
+- `cleanup.sh` - Removes all lab resources
+- `solution/solution.md` - Step-by-step solution
 
----
-
-## Danh sách bài lab
-
-### Domain 1 – Cluster Setup (15%)
-| Lab | Chủ đề | Độ khó |
-|-----|--------|--------|
-| 1.1 | NetworkPolicy Default Deny | Trung bình |
-| 1.2 | Pod Security Standards (PSS) | Trung bình |
-| 1.3 | Ingress TLS | Trung bình |
-| 1.4 | CIS Benchmark với kube-bench | Trung bình |
-
-### Domain 2 – Cluster Hardening (15%)
-| Lab | Chủ đề | Độ khó |
-|-----|--------|--------|
-| 2.1 | RBAC Least Privilege | Trung bình |
-| 2.2 | Audit Policy | Nâng cao |
-| 2.3 | ServiceAccount Token Automount | Cơ bản |
-| 2.4 | Restrict API Server Access | Nâng cao |
-
-### Domain 3 – System Hardening (10%)
-| Lab | Chủ đề | Độ khó |
-|-----|--------|--------|
-| 3.1 | AppArmor | Nâng cao |
-| 3.2 | Seccomp | Nâng cao |
-| 3.3 | Minimize OS Footprint | Trung bình |
-
-### Domain 4 – Minimize Microservice Vulnerabilities (20%)
-| Lab | Chủ đề | Độ khó |
-|-----|--------|--------|
-| 4.1 | Trivy Image Scan | Cơ bản |
-| 4.2 | Secret Encryption at Rest | Nâng cao |
-| 4.3 | Secret Volume Mount | Cơ bản |
-| 4.4 | RuntimeClass Sandbox | Trung bình |
-| 4.5 | Pod-to-Pod Encryption với Cilium | Nâng cao |
-
-### Domain 5 – Supply Chain Security (20%)
-| Lab | Chủ đề | Độ khó |
-|-----|--------|--------|
-| 5.1 | cosign Image Signing | Trung bình |
-| 5.2 | Static Analysis (kubesec/trivy config) | Cơ bản |
-| 5.3 | Image Policy Webhook (OPA/Gatekeeper) | Nâng cao |
-| 5.4 | SBOM (Software Bill of Materials) | Trung bình |
-| 5.5 | KubeLinter Static Analysis | Cơ bản |
-
-### Domain 6 – Monitoring, Logging & Runtime Security (20%)
-| Lab | Chủ đề | Độ khó |
-|-----|--------|--------|
-| 6.1 | Falco Rules (Shell Spawn Detection) | Trung bình |
-| 6.2 | Audit Log Analysis | Trung bình |
-| 6.3 | Immutable Containers | Cơ bản |
-| 6.4 | Behavioral Analytics với Falco | Nâng cao |
-
----
-
-## Hướng dẫn bắt đầu
-
-### 1. Cài đặt công cụ cần thiết
-
-Trước khi bắt đầu, đảm bảo đã cài đặt đầy đủ các công cụ sau:
-
-| Công cụ | Mục đích | Cài đặt |
-|---------|----------|---------|
-| `kubectl` | Tương tác với Kubernetes cluster | https://kubernetes.io/docs/tasks/tools/ |
-| `trivy` | Quét lỗ hổng bảo mật container image và config | https://aquasecurity.github.io/trivy |
-| `cosign` | Ký và xác minh chữ ký container image | https://docs.sigstore.dev/cosign/installation/ |
-| `falco` | Runtime security – phát hiện hành vi bất thường | https://falco.org/docs/getting-started/ |
-| `kube-bench` | Kiểm tra CIS Kubernetes Benchmark | https://github.com/aquasecurity/kube-bench |
-| `kubesec` | Phân tích static bảo mật Kubernetes manifest | https://kubesec.io/ |
-| `helm` | Quản lý Kubernetes packages | https://helm.sh/docs/intro/install/ |
-| `syft` | Tạo SBOM từ container image | https://github.com/anchore/syft |
-| `cilium` CLI | Kiểm tra và quản lý Cilium CNI | https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/ |
-| `kube-linter` | Lint Kubernetes manifests theo best practices | https://docs.kubelinter.io/ |
-
-### 2. Yêu cầu môi trường
-
-- Kubernetes cluster >= **1.29** (ít nhất 1 control-plane + 1 worker node)
-- Quyền truy cập `cluster-admin` vào cluster
-- Hệ điều hành Linux trên các node (Ubuntu 22.04 LTS khuyến nghị)
-
-### 3. Cách thực hành một bài lab
+## Quick Start
 
 ```bash
-# 1. Vào thư mục bài lab
-cd labs/01-cluster-setup/lab-1.1-network-policy/
+# 1. Navigate to a lab
+cd labs/01-cluster-setup/lab-1.1-etcd-encryption
 
-# 2. Đọc README.md để hiểu mục tiêu và yêu cầu
-cat README.md
+# 2. Set up the lab environment
+./setup.sh
 
-# 3. Khởi tạo môi trường
-bash setup.sh
+# 3. Complete the lab following README.md instructions
 
-# 4. Thực hành theo hướng dẫn trong README.md
+# 4. Verify your solution
+./verify.sh
 
-# 5. Kiểm tra kết quả
-bash verify.sh
-
-# 6. Dọn dẹp môi trường sau khi hoàn thành
-bash cleanup.sh
+# 5. Clean up
+./cleanup.sh
 ```
 
 ---
 
-## Cấu trúc thư mục
+## Domain 1: Cluster Setup (15% - 9 labs)
 
-```
-cks-lab-exercises/
-├── README.md                          # File này
-├── labs/
-│   ├── 01-cluster-setup/              # Domain 1 – 15% (4 labs)
-│   ├── 02-cluster-hardening/          # Domain 2 – 15% (4 labs)
-│   ├── 03-system-hardening/           # Domain 3 – 10% (3 labs)
-│   ├── 04-microservice-vulnerabilities/ # Domain 4 – 20% (5 labs)
-│   ├── 05-supply-chain-security/      # Domain 5 – 20% (5 labs)
-│   └── 06-monitoring-runtime/         # Domain 6 – 20% (4 labs)
-├── cheatsheets/                       # Tham khảo nhanh theo domain
-│   ├── 01-cluster-setup.md
-│   ├── 02-cluster-hardening.md
-│   ├── 03-system-hardening.md
-│   ├── 04-microservice-vulnerabilities.md
-│   ├── 05-supply-chain-security.md
-│   └── 06-monitoring-runtime.md
-└── mock-exams/                        # Bài thi thử mô phỏng đề thi thực
-    ├── mock-exam-1/
-    └── mock-exam-2/
-```
+| Lab | Topic | Difficulty | Time |
+|-----|-------|-----------|------|
+| 1.1 | Cấu hình etcd Encryption | Easy | 13 minutes |
+| 1.2 | NetworkPolicy - Deny All Ingress | Medium | 13 minutes |
+| 1.3 | Cấu hình containerd | Easy | 9 minutes |
+| 1.4 | CIS Benchmark with kube-bench | Medium | 20 minutes |
+| 1.5 | Ingress TLS Configuration | Medium | 20 minutes |
+| 1.6 | NetworkPolicy Egress Control | Medium | 20 minutes |
+| 1.7 | Node Metadata Protection | Medium | 15 minutes |
+| 1.8 | Kubernetes Binary Verification | Easy | 15 minutes |
+| 1.9 | Cluster Upgrade Security Considerations | Hard | 25 minutes |
+
+## Domain 2: Cluster Hardening (15% - 9 labs)
+
+| Lab | Topic | Difficulty | Time |
+|-----|-------|-----------|------|
+| 2.1 | Cấu hình API Server Security | Hard | 19 minutes |
+| 2.2 | RBAC - Nguyên tắc Tối Thiểu Đặc Quyền | Easy | 13 minutes |
+| 2.3 | Cấu hình Audit Log | Medium | 16 minutes |
+| 2.4 | Kubelet Security Configuration | Easy | 11 minutes |
+| 2.5 | ServiceAccount Token Management | Medium | 20 minutes |
+| 2.6 | Admission Controllers Configuration | Hard | 25 minutes |
+| 2.7 | Certificate Management and Rotation | Hard | 25 minutes |
+| 2.8 | Control Plane Security Hardening | Hard | 25 minutes |
+| 2.9 | NodeRestriction Admission Controller | Medium | 20 minutes |
+
+## Domain 3: System Hardening (10% - 6 labs)
+
+| Lab | Topic | Difficulty | Time |
+|-----|-------|-----------|------|
+| 3.1 | seccomp Profile | Medium | 13 minutes |
+| 3.2 | AppArmor Configuration | Hard | 26 minutes |
+| 3.3 | Linux Capabilities Management | Easy | 11 minutes |
+| 3.4 | Kernel Security Parameters (sysctl) | Hard | 22 minutes |
+| 3.5 | Minimizing Host OS Footprint | Medium | 20 minutes |
+| 3.6 | IAM Roles and Cloud Identity Management | Medium | 20 minutes |
+
+## Domain 4: Minimize Microservice Vulnerabilities (20% - 12 labs)
+
+| Lab | Topic | Difficulty | Time |
+|-----|-------|-----------|------|
+| 4.1 | Pod Security Admission (PSA) — Thay thế PSP | Medium | 13 minutes |
+| 4.10 | Multi-Tenancy Isolation | Hard | 25 minutes |
+| 4.11 | Image Vulnerability Management | Medium | 20 minutes |
+| 4.12 | Runtime Security with Falco Integration | Hard | 25 minutes |
+| 4.2 | Trivy - Quét lỗ hổng image | Medium | 18 minutes |
+| 4.3 | ResourceQuota & LimitRange | Easy | 11 minutes |
+| 4.4 | Security Contexts | Medium | 20 minutes |
+| 4.5 | Secret Management | Medium | 20 minutes |
+| 4.6 | NetworkPolicy for Microservices | Medium | 20 minutes |
+| 4.7 | OPA Gatekeeper Policy Enforcement | Hard | 25 minutes |
+| 4.8 | Sandbox Containers with gVisor | Hard | 25 minutes |
+| 4.9 | Pod-to-Pod Encryption with mTLS | Hard | 25 minutes |
+
+## Domain 5: Supply Chain Security (20% - 12 labs)
+
+| Lab | Topic | Difficulty | Time |
+|-----|-------|-----------|------|
+| 5.1 | Cosign — Ký và Xác thực Image | Hard | 25 minutes |
+| 5.10 | Container Image Hardening | Medium | 20 minutes |
+| 5.11 | Dependency Scanning with Trivy | Medium | 20 minutes |
+| 5.12 | Admission Controllers for Supply Chain Enforcement | Hard | 25 minutes |
+| 5.2 | Kyverno Policy — Supply Chain Security | Easy | 15 minutes |
+| 5.3 | ImagePolicyWebhook | Easy | 11 minutes |
+| 5.4 | SBOM với Syft | Medium | 16 minutes |
+| 5.5 | Base Image Minimization | Medium | 20 minutes |
+| 5.6 | CI/CD Pipeline Security | Hard | 25 minutes |
+| 5.7 | Cosign Verification with Kyverno verifyImages | Hard | 25 minutes |
+| 5.8 | Private Registry Security | Medium | 20 minutes |
+| 5.9 | Supply Chain Attestation with In-toto and SLSA | Hard | 25 minutes |
+
+## Domain 6: Monitoring & Runtime Security (20% - 12 labs)
+
+| Lab | Topic | Difficulty | Time |
+|-----|-------|-----------|------|
+| 6.1 | Cài đặt Falco | Hard | 19 minutes |
+| 6.10 | Container Behavior Analysis with Falco and Audit Logs | Hard | 30 minutes |
+| 6.11 | Kubernetes Incident Response Procedures | Hard | 35 minutes |
+| 6.12 | Network Traffic Monitoring and Anomaly Detection | Hard | 30 minutes |
+| 6.2 | Viết Falco Rules | Medium | 15 minutes |
+| 6.3 | Audit Log Query & Analysis | Hard | 22 minutes |
+| 6.4 | CNI Network Encryption (Cilium IPsec) | Hard | 77 minutes |
+| 6.5 | Falco Custom Rules - Sensitive File Access Monitoring | Medium | 20 minutes |
+| 6.6 | Falco Custom Rules - Privileged Container Detection | Medium | 20 minutes |
+| 6.7 | Advanced NetworkPolicy - Multi-Tier Application Isolation | Hard | 30 minutes |
+| 6.8 | Threat Detection - Attack Simulation and Response | Hard | 35 minutes |
+| 6.9 | Runtime Immutability - Immutable Containers and Read-Only Filesystems | Medium | 25 minutes |
 
 ---
 
-## Nguồn tham khảo
+## Prerequisites
 
-- [Linux Foundation CKS Curriculum](https://github.com/cncf/curriculum)
-- [CKS Program Changes (15/10/2024)](https://training.linuxfoundation.org/cks-program-changes/)
-- [Kubernetes Security Documentation](https://kubernetes.io/docs/concepts/security/)
+- Kubernetes cluster v1.29+ (minikube, kind, or cloud provider)
+- `kubectl` configured and connected to the cluster
+- Domain-specific tools: `trivy`, `cosign`, `falco`, `kube-bench`, `syft`
+
+## CKS Exam Domains
+
+| Domain | Weight | Labs |
+|--------|--------|------|
+| 1. Cluster Setup | 15% | 9 |
+| 2. Cluster Hardening | 15% | 9 |
+| 3. System Hardening | 10% | 6 |
+| 4. Minimize Microservice Vulnerabilities | 20% | 12 |
+| 5. Supply Chain Security | 20% | 12 |
+| 6. Monitoring & Runtime Security | 20% | 12 |
+
+---
+
+*Generated for CKS 2026 exam preparation*

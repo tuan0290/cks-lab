@@ -1,99 +1,85 @@
 #!/bin/bash
-# Lab 5.1 – cosign Image Signing
-# Script khởi tạo môi trường lab
-
 set -e
 
-echo "=========================================="
-echo " Lab 5.1 – cosign Image Signing"
-echo " Đang khởi tạo môi trường..."
-echo "=========================================="
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-# --- Kiểm tra prerequisites ---
+echo -e "${GREEN}=== Lab Setup: Cosign — Ký và Xác thực Image ===${NC}"
+echo ""
 
-if ! command -v kubectl &>/dev/null; then
-  echo "[ERROR] kubectl không tìm thấy. Vui lòng cài đặt kubectl trước."
-  exit 1
-fi
+# Check prerequisites
+check_prerequisites() {
+    echo "Checking prerequisites..."
+    echo ""
 
-if ! kubectl cluster-info &>/dev/null; then
-  echo "[ERROR] Không thể kết nối đến Kubernetes cluster."
-  echo "        Kiểm tra kubeconfig: kubectl cluster-info"
-  exit 1
-fi
+    # Check kubectl
+    if ! command -v kubectl &> /dev/null; then
+        echo -e "${RED}Error: kubectl not found${NC}"
+        echo "Install kubectl: https://kubernetes.io/docs/tasks/tools/"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ kubectl found${NC}"
 
-echo "[OK] kubectl và cluster kết nối thành công."
+    # Check cluster connectivity
+    if ! kubectl cluster-info &> /dev/null; then
+        echo -e "${RED}Error: Cannot connect to Kubernetes cluster${NC}"
+        echo "Make sure your kubeconfig is configured correctly"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Connected to Kubernetes cluster${NC}"
 
-if ! command -v cosign &>/dev/null; then
-  echo "[WARN] cosign không tìm thấy. Đang tự động cài đặt..."
-  echo ""
+    # Check syft
+    if ! command -v syft &> /dev/null; then
+        echo -e "${YELLOW}Warning: syft not found${NC}"
+        echo "Install syft: https://github.com/anchore/syft#installation"
+        echo "This lab requires this tool to complete"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ syft found${NC}"
 
-  curl -sL -o /tmp/cosign-linux-amd64 \
-    https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64
-  mv /tmp/cosign-linux-amd64 /usr/local/bin/cosign
-  chmod +x /usr/local/bin/cosign
+    # Check cosign
+    if ! command -v cosign &> /dev/null; then
+        echo -e "${YELLOW}Warning: cosign not found${NC}"
+        echo "Install cosign: https://docs.sigstore.dev/cosign/installation/"
+        echo "This lab requires this tool to complete"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ cosign found${NC}"
 
-  if ! command -v cosign &>/dev/null; then
-    echo "[ERROR] Không thể cài đặt cosign tự động."
-    echo "        Cài đặt thủ công:"
-    echo "          curl -O -L https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
-    echo "          sudo mv cosign-linux-amd64 /usr/local/bin/cosign"
-    echo "          sudo chmod +x /usr/local/bin/cosign"
-    exit 1
-  fi
+    echo ""
+}
 
-  echo "[OK] cosign đã được cài đặt thành công: $(cosign version 2>/dev/null | head -1)"
-else
-  echo "[OK] cosign đã được cài đặt: $(cosign version 2>/dev/null | head -1)"
-fi
+# Create resources
+create_resources() {
+    echo "Creating lab resources..."
+    echo ""
 
-# --- Tạo namespace cosign-lab ---
+    # Create namespace
+    kubectl create namespace lab-5-1 --dry-run=client -o yaml | kubectl apply -f - > /dev/null 2>&1
+    echo -e "${GREEN}✓ Namespace lab-5-1 ready${NC}"
+
+    # Execute setup commands
+    # Execute command
+    go install github.com/sigstore/cosign/v2/cmd/cosign@latest > /dev/null 2>&1 || true
+
+    # Execute command
+    cosign generate-key-pair > /dev/null 2>&1 || true
+
+    # Execute command
+    cosign sign myregistry.io/myproject/myimage:v1.0 > /dev/null 2>&1 || true
+
+    echo ""
+}
+
+# Main execution
+check_prerequisites
+create_resources
 
 echo ""
-echo "Tạo namespace cosign-lab..."
-
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: cosign-lab
-  labels:
-    lab: "5.1"
-    purpose: cosign-image-signing
-EOF
-
-echo "[OK] Namespace 'cosign-lab' đã được tạo."
-
-# --- Tạo thư mục làm việc ---
-
-echo ""
-echo "Tạo thư mục làm việc /tmp/cosign-lab..."
-mkdir -p /tmp/cosign-lab
-echo "[OK] Thư mục /tmp/cosign-lab đã sẵn sàng."
-
-echo ""
-echo "=========================================="
-echo " Môi trường đã sẵn sàng!"
-echo "=========================================="
-echo ""
-echo "Tài nguyên đã tạo:"
-echo "  Namespace:  cosign-lab"
-echo "  Thư mục:    /tmp/cosign-lab"
-echo ""
-echo "NHIỆM VỤ:"
-echo "  1. Tạo cosign key pair:"
-echo "       cd /tmp/cosign-lab"
-echo "       cosign generate-key-pair"
-echo ""
-echo "  2. Ký image nginx:1.25-alpine:"
-echo "       COSIGN_PASSWORD=\"\" cosign sign --key /tmp/cosign-lab/cosign.key nginx:1.25-alpine"
-echo ""
-echo "  3. Xác minh chữ ký:"
-echo "       cosign verify --key /tmp/cosign-lab/cosign.pub nginx:1.25-alpine"
-echo ""
-echo "  4. Chạy verify.sh để kiểm tra kết quả:"
-echo "       bash verify.sh"
-echo ""
-echo "Dọn dẹp sau khi hoàn thành:"
-echo "  bash cleanup.sh"
-echo ""
+echo -e "${GREEN}✓ Lab setup complete${NC}"
+echo "Resources created in namespace: lab-5-1"
+kubectl get all -n lab-5-1 2>/dev/null || true

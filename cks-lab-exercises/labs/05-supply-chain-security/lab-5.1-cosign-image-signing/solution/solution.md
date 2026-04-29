@@ -1,138 +1,130 @@
-# Giải pháp – Lab 5.1 cosign Image Signing
+# Solution: Lab 5.1 - Cosign — Ký và Xác thực Image
 
-## Bước 1: Tạo cosign key pair
+## Overview
+
+This solution provides step-by-step instructions for completing the Cosign — Ký và Xác thực Image lab exercise.
+
+## Solution Steps
+
+### Step 1: Run the setup script
+
+Execute the setup script to create the initial environment:
 
 ```bash
-# Tạo thư mục làm việc
-mkdir -p /tmp/cosign-lab
-cd /tmp/cosign-lab
+./setup.sh
+```
 
-# Tạo key pair (nhấn Enter để dùng passphrase trống trong lab)
+### Step 2: Execute command 1
+
+```bash
+go install github.com/sigstore/cosign/v2/cmd/cosign@latest
+```
+
+### Step 3: Execute command 2
+
+```bash
 cosign generate-key-pair
 ```
 
-Output mong đợi:
-```
-Enter password for private key:
-Enter password for private key again:
-Private key written to cosign.key
-Public key written to cosign.pub
-```
-
-Kết quả:
-- `cosign.key`: Private key (giữ bí mật, dùng để ký)
-- `cosign.pub`: Public key (chia sẻ công khai, dùng để xác minh)
-
-## Bước 2: Ký image nginx:1.25-alpine
+### Step 4: Execute command 3
 
 ```bash
-# Ký image bằng private key (passphrase trống)
-COSIGN_PASSWORD="" cosign sign --key /tmp/cosign-lab/cosign.key nginx:1.25-alpine
+cosign sign myregistry.io/myproject/myimage:v1.0
 ```
 
-Output mong đợi:
-```
-Pushing signature to: index.docker.io/library/nginx
-```
-
-**Lưu ý:** cosign ký theo image digest (SHA256), không phải tag. Chữ ký được lưu trong registry dưới dạng OCI artifact.
-
-## Bước 3: Xác minh chữ ký
+### Step 5: Execute command 4
 
 ```bash
-# Xác minh chữ ký bằng public key
-cosign verify --key /tmp/cosign-lab/cosign.pub nginx:1.25-alpine
+cosign sign \
 ```
 
-Output mong đợi:
-```
-Verification for index.docker.io/library/nginx:1.25-alpine --
-The following checks were performed on each of these signatures:
-  - The cosign claims were validated
-  - The signatures were verified against the specified public key
-
-[{"critical":{"identity":{"docker-reference":"index.docker.io/library/nginx"},"image":{"docker-manifest-digest":"sha256:..."},"type":"cosign container image signature"},"optional":null}]
-```
-
-## Bước 4: Xem thông tin chi tiết về chữ ký
+### Step 6: Execute command 5
 
 ```bash
-# Xem digest reference của chữ ký
-cosign triangulate nginx:1.25-alpine
-
-# Xác minh và xuất kết quả dạng JSON
-cosign verify --key /tmp/cosign-lab/cosign.pub nginx:1.25-alpine | jq .
+--annotations "version=1.0" \
 ```
 
-## Bước 5: Chạy verify script
+### Step 7: Execute command 6
 
 ```bash
-bash verify.sh
+--annotations "author=team" \
 ```
 
-Output mong đợi:
-```
-[PASS] File cosign.key và cosign.pub tồn tại trong /tmp/cosign-lab/
-[PASS] cosign xác minh chữ ký của nginx:1.25-alpine thành công
-[PASS] Namespace 'cosign-lab' tồn tại trong cluster
----
-Kết quả: 3/3 tiêu chí đạt
-```
-
-## Tóm tắt lệnh cosign quan trọng
-
-| Lệnh | Mục đích |
-|------|----------|
-| `cosign generate-key-pair` | Tạo key pair (cosign.key + cosign.pub) |
-| `cosign sign --key cosign.key <image>` | Ký image bằng private key |
-| `cosign verify --key cosign.pub <image>` | Xác minh chữ ký bằng public key |
-| `cosign triangulate <image>` | Xem vị trí lưu chữ ký trong registry |
-| `cosign download signature <image>` | Tải chữ ký về |
-| `cosign attest --key cosign.key <image>` | Đính kèm attestation (SBOM, SLSA) |
-
-## Keyless Signing (nâng cao)
-
-Trong môi trường CI/CD, có thể dùng keyless signing với OIDC:
+### Step 8: Execute command 7
 
 ```bash
-# Ký không cần key (dùng OIDC identity từ GitHub Actions, GitLab CI, v.v.)
-cosign sign --identity-token=$(cat $ACTIONS_ID_TOKEN_REQUEST_TOKEN) <image>
-
-# Xác minh keyless signature
-cosign verify --certificate-identity=<email> --certificate-oidc-issuer=<issuer> <image>
+myregistry.io/myproject/myimage:v1.0
 ```
 
-## Tích hợp với Kubernetes (Sigstore Policy Controller)
+### Step 9: Execute command 8
 
-```yaml
-# ClusterImagePolicy để enforce image signing
-apiVersion: policy.sigstore.dev/v1beta1
-kind: ClusterImagePolicy
-metadata:
-  name: require-signed-images
-spec:
-  images:
-  - glob: "**"
-  authorities:
-  - key:
-      data: |
-        -----BEGIN PUBLIC KEY-----
-        <nội dung cosign.pub>
-        -----END PUBLIC KEY-----
+```bash
+cosign verify myregistry.io/myproject/myimage:v1.0 \
 ```
 
-## Giải thích bảo mật
+### Step 10: Execute command 9
 
-### Tại sao ký image theo digest?
+```bash
+--key cosign.pub
+```
 
-cosign ký theo image digest (SHA256 hash của manifest), không phải tag. Điều này đảm bảo:
-- Tag có thể bị thay đổi (mutable), nhưng digest là bất biến
-- Chữ ký gắn với nội dung cụ thể của image, không phải tên tag
-- Nếu image bị thay đổi, digest thay đổi → chữ ký không còn hợp lệ
+### Step 11: Execute command 10
 
-### Lưu trữ private key an toàn
+```bash
+syft myregistry.io/myproject/myimage:v1.0 -o cyclonedx-json > sbom.json
+```
 
-Trong production, không nên lưu private key dưới dạng file. Thay vào đó:
-- **KMS**: `cosign sign --key gcpkms://...` hoặc `--key awskms://...`
-- **Hardware token**: `cosign sign --key pkcs11://...`
-- **Keyless**: Dùng OIDC identity trong CI/CD pipeline
+### Step 12: Execute command 11
+
+```bash
+cosign attach sbom --type cyclonedx sbom.json \
+```
+
+### Step 13: Execute command 12
+
+```bash
+myregistry.io/myproject/myimage:v1.0
+```
+
+### Step 14: Verify the configuration
+
+Run the verification script to confirm everything is working:
+
+```bash
+./verify.sh
+```
+
+## Verification
+
+After completing all steps, verify your solution:
+
+```bash
+./verify.sh
+```
+
+Expected output: All checks should pass.
+
+## Common Mistakes
+
+- Forgetting to create the namespace before applying resources
+- Not waiting for resources to be ready before verification
+- Incorrect YAML indentation
+- Missing required labels or annotations
+- Incorrect security context configuration
+- Not considering resource dependencies
+
+## Troubleshooting
+
+**Issue**: Resources not being created
+
+**Solution**: Check kubectl logs and describe the resources to see error messages. Verify YAML syntax and API versions.
+
+**Issue**: Verification script fails
+
+**Solution**: Review the specific check that failed. Use kubectl get/describe commands to inspect the actual state of resources.
+
+## Key Takeaways
+
+- Understanding Cosign — Ký và Xác thực Image is essential for Kubernetes security
+- Always verify configurations before deploying to production
+- Security controls should be tested regularly

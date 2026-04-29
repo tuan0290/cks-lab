@@ -1,47 +1,29 @@
 #!/bin/bash
-# Lab 5.1 – cosign Image Signing
-# Script dọn dẹp môi trường lab
 
-echo "=========================================="
-echo " Lab 5.1 – Dọn dẹp môi trường"
-echo "=========================================="
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${YELLOW}=== Lab Cleanup: Cosign — Ký và Xác thực Image ===${NC}"
 echo ""
 
-if ! command -v kubectl &>/dev/null; then
-  echo "[ERROR] kubectl không tìm thấy."
-  exit 1
-fi
+# Delete resources
+delete_resources() {
+    echo "Deleting lab resources..."
+    echo ""
 
-if ! kubectl cluster-info &>/dev/null; then
-  echo "[ERROR] Không thể kết nối đến cluster."
-  exit 1
-fi
+    # Delete namespace
+    kubectl delete namespace lab-5-1 --ignore-not-found=true > /dev/null 2>&1
+    echo -e "${GREEN}✓ Namespace lab-5-1 deleted${NC}"
 
-# --- Xóa namespace cosign-lab ---
+    echo ""
+}
 
-echo "Xóa namespace cosign-lab..."
-
-if kubectl get namespace cosign-lab &>/dev/null; then
-  kubectl delete namespace cosign-lab --ignore-not-found=true
-  echo "[OK] Namespace 'cosign-lab' đã được xóa."
-else
-  echo "[SKIP] Namespace 'cosign-lab' không tồn tại."
-fi
-
-# --- Xóa thư mục /tmp/cosign-lab ---
-
-if [ -d /tmp/cosign-lab ]; then
-  rm -rf /tmp/cosign-lab
-  echo "[OK] Thư mục /tmp/cosign-lab đã được xóa."
-else
-  echo "[SKIP] Thư mục /tmp/cosign-lab không tồn tại."
-fi
+# Main execution
+delete_resources
 
 echo ""
-echo "=========================================="
-echo " Dọn dẹp hoàn tất!"
-echo "=========================================="
-echo ""
-echo "Cluster đã được reset về trạng thái ban đầu."
-echo "Bạn có thể chạy lại setup.sh để bắt đầu lại bài lab."
-echo ""
+echo -e "${GREEN}✓ Lab cleanup complete${NC}"

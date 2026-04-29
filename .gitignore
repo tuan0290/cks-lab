@@ -2,7 +2,7 @@
 .kiro/
 
 # Tài liệu cá nhân — không đẩy lên repo
-cks-lab-exercises/CKS_2026_Lab_Guide.md
+CKS_2026_Lab_Guide.md
 *.pdf
 
 # Temp/backup files

@@ -1,0 +1,62 @@
+# CKS Lab Generator Configuration
+# This file contains default configuration for lab generation
+
+# Output directory for generated labs
+output_directory: "cks-lab-exercises/labs"
+
+# Naming convention for lab directories
+# Available placeholders: {domain}, {number}, {topic}
+naming_convention: "lab-{domain}.{number}-{topic}"
+
+# Target Kubernetes version
+kubernetes_version: "v1.29+"
+
+# Difficulty criteria for lab classification
+difficulty_criteria:
+  easy:
+    max_commands: 3
+    max_yaml_files: 1
+    max_steps: 3
+  medium:
+    max_commands: 7
+    max_yaml_files: 3
+    max_steps: 6
+  hard:
+    max_commands: 15
+    max_yaml_files: 5
+    max_steps: 10
+
+# Required tools for labs
+required_tools:
+  - kubectl
+  - trivy
+  - cosign
+  - falco
+  - syft
+  - kube-bench
+
+# Script template paths
+script_templates:
+  setup: "templates/setup.sh.j2"
+  cleanup: "templates/cleanup.sh.j2"
+  verify: "templates/verify.sh.j2"
+
+# Domain weights (must sum to 100)
+domain_weights:
+  1: 15  # Cluster Setup
+  2: 15  # Cluster Hardening
+  3: 10  # System Hardening
+  4: 20  # Microservice Vulnerabilities
+  5: 20  # Supply Chain Security
+  6: 20  # Monitoring & Runtime Security
+
+# Time estimation formula parameters
+time_estimation:
+  base_time: 5  # minutes
+  per_command: 1  # minutes per command
+  per_yaml: 2  # minutes per YAML manifest
+  per_prerequisite: 2  # minutes per prerequisite
+  difficulty_multipliers:
+    easy: 1.0
+    medium: 1.2
+    hard: 1.5

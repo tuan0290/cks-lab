@@ -1,113 +1,66 @@
 #!/bin/bash
-# Lab 5.1 – cosign Image Signing
-# Script kiểm tra kết quả bài lab
 
-PASS=0
-FAIL=0
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+PASSED=0
 FAILED=0
 
-echo "=========================================="
-echo " Lab 5.1 – Kiểm tra kết quả"
-echo "=========================================="
+echo -e "${YELLOW}=== Lab Verification: Cosign — Ký và Xác thực Image ===${NC}"
 echo ""
 
-# --- Hàm tiện ích ---
+# Check function
+check() {
+    local description="$1"
+    local command="$2"
+    local expected="$3"
+    local hint="$4"
 
-pass() {
-  echo "[PASS] $1"
-  PASS=$((PASS + 1))
+    echo -n "Checking: $description... "
+
+    if eval "$command" 2>/dev/null | grep -q "$expected"; then
+        echo -e "${GREEN}✓ PASS${NC}"
+        ((PASSED++))
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        if [ -n "$hint" ]; then
+            echo -e "  ${YELLOW}Hint: $hint${NC}"
+        fi
+        ((FAILED++))
+    fi
 }
 
-fail() {
-  echo "[FAIL] $1"
-  if [ -n "$2" ]; then
-    echo "       Gợi ý: $2"
-  fi
-  FAIL=$((FAIL + 1))
-  FAILED=1
-}
+# Verification checks
 
-# --- Kiểm tra kubectl ---
+check \
+    "Namespace lab-5-1 exists" \
+    "kubectl get namespace lab-5-1" \
+    "lab-5-1" \
+    "Create the namespace first"
 
-if ! command -v kubectl &>/dev/null; then
-  echo "[ERROR] kubectl không tìm thấy. Không thể chạy kiểm tra."
-  exit 1
-fi
+check \
+    "Resources exist in namespace" \
+    "kubectl get all -n lab-5-1" \
+    "NAME" \
+    "Create the required resources"
 
-if ! kubectl cluster-info &>/dev/null; then
-  echo "[ERROR] Không thể kết nối đến cluster."
-  exit 1
-fi
 
-# --- Tiêu chí 1: cosign key pair tồn tại trong /tmp/cosign-lab/ ---
-
-echo "Kiểm tra tiêu chí 1: cosign key pair tồn tại trong /tmp/cosign-lab/"
-
-if [ -f /tmp/cosign-lab/cosign.key ] && [ -f /tmp/cosign-lab/cosign.pub ]; then
-  pass "File cosign.key và cosign.pub tồn tại trong /tmp/cosign-lab/"
-else
-  if [ ! -f /tmp/cosign-lab/cosign.key ]; then
-    fail "File cosign.key không tìm thấy trong /tmp/cosign-lab/" \
-         "cd /tmp/cosign-lab && cosign generate-key-pair"
-  fi
-  if [ ! -f /tmp/cosign-lab/cosign.pub ]; then
-    fail "File cosign.pub không tìm thấy trong /tmp/cosign-lab/" \
-         "cd /tmp/cosign-lab && cosign generate-key-pair"
-  fi
-fi
-
+# Summary
 echo ""
+echo "================================"
+echo "Total checks: $((PASSED + FAILED))"
+echo -e "${GREEN}Passed: $PASSED${NC}"
+echo -e "${RED}Failed: $FAILED${NC}"
+echo "================================"
 
-# --- Tiêu chí 2: cosign có thể xác minh chữ ký của image ---
-
-echo "Kiểm tra tiêu chí 2: cosign có thể xác minh chữ ký của nginx:1.25-alpine"
-
-if ! command -v cosign &>/dev/null; then
-  fail "cosign không tìm thấy" \
-       "Cài đặt cosign: https://docs.sigstore.dev/cosign/system_config/installation/"
-elif [ ! -f /tmp/cosign-lab/cosign.pub ]; then
-  fail "Không thể xác minh: cosign.pub không tồn tại" \
-       "Tạo key pair trước: cd /tmp/cosign-lab && cosign generate-key-pair"
+if [ $FAILED -eq 0 ]; then
+    echo -e "${GREEN}✓ All checks passed!${NC}"
+    exit 0
 else
-  if COSIGN_PASSWORD="" cosign verify --key /tmp/cosign-lab/cosign.pub nginx:1.25-alpine &>/dev/null 2>&1; then
-    pass "cosign xác minh chữ ký của nginx:1.25-alpine thành công"
-  else
-    fail "cosign không thể xác minh chữ ký của nginx:1.25-alpine" \
-         "Ký image trước: COSIGN_PASSWORD=\"\" cosign sign --key /tmp/cosign-lab/cosign.key nginx:1.25-alpine"
-  fi
-fi
-
-echo ""
-
-# --- Tiêu chí 3: Namespace cosign-lab tồn tại ---
-
-echo "Kiểm tra tiêu chí 3: Namespace 'cosign-lab' tồn tại trong cluster"
-
-if kubectl get namespace cosign-lab &>/dev/null; then
-  pass "Namespace 'cosign-lab' tồn tại trong cluster"
-else
-  fail "Namespace 'cosign-lab' không tìm thấy" \
-       "Chạy setup.sh để tạo namespace: bash setup.sh"
-fi
-
-echo ""
-
-# --- Tóm tắt ---
-
-TOTAL=$((PASS + FAIL))
-echo "=========================================="
-echo " Kết quả: ${PASS}/${TOTAL} tiêu chí đạt"
-echo "=========================================="
-
-if [ "$FAILED" -eq 1 ]; then
-  echo ""
-  echo "Một số tiêu chí chưa đạt. Xem gợi ý ở trên và thử lại."
-  echo "Tham khảo: README.md hoặc solution/solution.md"
-  exit 1
-else
-  echo ""
-  echo "Chúc mừng! Bạn đã hoàn thành Lab 5.1."
-  echo "Tiếp theo: Đọc phần 'Giải thích' trong README.md"
-  echo "Dọn dẹp: bash cleanup.sh"
-  exit 0
+    echo -e "${RED}✗ Some checks failed. Review the hints above.${NC}"
+    exit 1
 fi

@@ -1,291 +1,210 @@
-# Lab 1.4 – CIS Benchmark với kube-bench
+# Lab 1.4: CIS Benchmark with kube-bench
 
-**Domain:** Cluster Setup (15%)
-**Thời gian ước tính:** 20 phút
-**Độ khó:** Trung bình
+## Metadata
 
----
+- **Domain**: 1 - Cluster Setup
+- **Difficulty**: Medium
+- **Estimated Time**: 20 minutes
+- **Exam Weight**: 15%
 
-## Mục tiêu
+## Learning Objectives
 
-- Chạy `kube-bench` để kiểm tra cấu hình CIS Kubernetes Benchmark trên kube-apiserver, etcd, và kubelet
-- Xác định các mục FAIL trong kết quả kiểm tra
-- Sửa ít nhất 2 vấn đề phổ biến: tắt profiling (`--profiling=false`) và tắt anonymous authentication (`--anonymous-auth=false`) trên kube-apiserver
+- Run kube-bench to audit Kubernetes cluster against CIS benchmarks
+- Interpret kube-bench output and identify FAIL/WARN items
+- Remediate common CIS benchmark failures on API server and kubelet
+- Understand CIS Kubernetes Benchmark sections and scoring
 
----
+## Prerequisites
 
-## Lý thuyết
+- Kubernetes cluster v1.29+
+- kubectl configured and connected to the cluster
+- kube-bench installed or available as a container image
 
-### CIS Benchmark là gì?
+## Scenario
 
-**CIS (Center for Internet Security)** là tổ chức phi lợi nhuận chuyên phát triển các tiêu chuẩn bảo mật được cộng đồng đồng thuận. **CIS Kubernetes Benchmark** là tập hợp các best practice bảo mật cho Kubernetes cluster, bao gồm hàng trăm kiểm tra cụ thể cho từng thành phần.
+Your security team requires the Kubernetes cluster to comply with CIS Kubernetes Benchmark v1.8. You need to run kube-bench to identify compliance failures, then remediate the most critical findings related to the API server configuration and kubelet settings.
 
-Mỗi kiểm tra có dạng:
-- **ID**: Ví dụ `1.2.1` (Section 1, Subsection 2, Check 1)
-- **Mô tả**: "Ensure that the --anonymous-auth argument is set to false"
-- **Lý do**: Tại sao cần thiết
-- **Cách sửa**: Lệnh hoặc cấu hình cụ thể
+## Requirements
 
-### kube-bench là gì?
+1. Run kube-bench against the cluster and capture the output
+2. Create a ConfigMap `cis-benchmark-results` in namespace `lab-1-4` with a summary of findings
+3. Create a ConfigMap `cis-remediation-plan` documenting at least 3 remediation steps
+4. Verify the namespace `lab-1-4` exists with label `security=cis-benchmark`
 
-**kube-bench** là công cụ open-source của Aqua Security tự động hóa việc kiểm tra CIS Kubernetes Benchmark. Thay vì kiểm tra thủ công từng item, kube-bench chạy tất cả checks và báo cáo kết quả:
+## Instructions
 
-```
-[PASS] 1.2.1 Ensure that the --anonymous-auth argument is set to false
-[FAIL] 1.2.16 Ensure that the --profiling argument is set to false
-[WARN] 1.2.20 Ensure that the --audit-log-path argument is set
-[INFO] 1.2.21 Ensure that the --audit-log-maxage argument is set to 30 or as appropriate
-```
-
-### Các thành phần được kiểm tra
-
-| Section | Thành phần | Ví dụ checks |
-|---------|-----------|--------------|
-| 1.x | kube-apiserver | anonymous-auth, audit logging, TLS |
-| 2.x | etcd | TLS, authentication |
-| 3.x | Control Plane | Scheduler, Controller Manager |
-| 4.x | Worker Node | kubelet config, file permissions |
-| 5.x | Policies | RBAC, Network Policies |
-
-### Các flag quan trọng của kube-apiserver
-
-Hai flag thường bị FAIL nhất trong CKS:
-
-**`--anonymous-auth=false`**
-- Mặc định: `true` — cho phép request không có credentials với identity `system:anonymous`
-- Rủi ro: Nếu RBAC cấu hình sai, anonymous user có thể truy cập API
-- Fix: Thêm `--anonymous-auth=false` vào kube-apiserver manifest
-
-**`--profiling=false`**
-- Mặc định: `true` — expose endpoint `/debug/pprof` chứa thông tin profiling
-- Rủi ro: Lộ thông tin về cấu trúc nội bộ, có thể bị dùng để tấn công DoS
-- Fix: Thêm `--profiling=false` vào kube-apiserver manifest
-
-### kube-apiserver là static pod
-
-Trên cluster được tạo bởi kubeadm, kube-apiserver chạy dưới dạng **static pod** — được quản lý bởi kubelet thông qua file manifest tại:
-
-```
-/etc/kubernetes/manifests/kube-apiserver.yaml
-```
-
-Khi bạn sửa file này, kubelet **tự động** phát hiện thay đổi và restart kube-apiserver (khoảng 30-60 giây). Không cần chạy lệnh restart thủ công.
+### Step 1: Set up the lab environment
 
 ```bash
-# Backup trước khi sửa
-sudo cp /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/kube-apiserver.yaml.bak
-
-# Sửa manifest
-sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml
-
-# Theo dõi quá trình restart
-kubectl get pods -n kube-system -l component=kube-apiserver -w
+./setup.sh
 ```
 
----
-
-## Bối cảnh
-
-Bạn là kỹ sư bảo mật vừa tiếp nhận một Kubernetes cluster mới. Trước khi đưa vào production, bạn cần kiểm tra cluster có tuân thủ CIS Kubernetes Benchmark không. Công cụ `kube-bench` của Aqua Security tự động hóa quá trình này bằng cách kiểm tra các cấu hình theo tiêu chuẩn CIS.
-
-Nhiệm vụ của bạn:
-1. Chạy `kube-bench` và xem kết quả cho các thành phần chính
-2. Xác định các mục FAIL liên quan đến kube-apiserver
-3. Sửa cấu hình `--profiling=false` và `--anonymous-auth=false` trên kube-apiserver
-4. Chạy lại `kube-bench` để xác nhận các mục đã được sửa
-
----
-
-## Yêu cầu môi trường
-
-- Kubernetes cluster >= 1.29 (kubeadm-based cluster được khuyến nghị)
-- `kubectl` đã được cấu hình và kết nối đến cluster
-- `kube-bench` đã được cài đặt trên control-plane node
-- Quyền truy cập SSH vào control-plane node (để chỉnh sửa kube-apiserver manifest)
-
-Cài đặt kube-bench (nếu chưa có):
-```bash
-# Tải binary mới nhất
-curl -L https://github.com/aquasecurity/kube-bench/releases/latest/download/kube-bench_linux_amd64.tar.gz | tar xz
-sudo mv kube-bench /usr/local/bin/
-```
-
-Chạy script khởi tạo môi trường:
-```bash
-bash setup.sh
-```
-
----
-
-## Các bước thực hiện
-
-### Bước 1: Chạy kube-bench cho toàn bộ cluster
+### Step 2: Run kube-bench as a Job
 
 ```bash
-# Chạy tất cả các kiểm tra (cần chạy trên control-plane node)
-sudo kube-bench run --targets master,etcd,node
-
-# Hoặc chạy riêng từng thành phần
-sudo kube-bench run --targets master
-sudo kube-bench run --targets etcd
-sudo kube-bench run --targets node
+cat <<EOF | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kube-bench
+  namespace: lab-1-4
+spec:
+  template:
+    spec:
+      hostPID: true
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      restartPolicy: Never
+      volumes:
+      - name: var-lib-etcd
+        hostPath:
+          path: "/var/lib/etcd"
+      - name: var-lib-kubelet
+        hostPath:
+          path: "/var/lib/kubelet"
+      - name: var-lib-kube-scheduler
+        hostPath:
+          path: "/var/lib/kube-scheduler"
+      - name: var-lib-kube-controller-manager
+        hostPath:
+          path: "/var/lib/kube-controller-manager"
+      - name: etc-systemd
+        hostPath:
+          path: "/etc/systemd"
+      - name: lib-systemd
+        hostPath:
+          path: "/lib/systemd/"
+      - name: etc-kubernetes
+        hostPath:
+          path: "/etc/kubernetes"
+      - name: usr-bin
+        hostPath:
+          path: "/usr/bin"
+      containers:
+      - name: kube-bench
+        image: aquasec/kube-bench:latest
+        command: ["kube-bench", "--json"]
+        volumeMounts:
+        - name: var-lib-etcd
+          mountPath: /var/lib/etcd
+          readOnly: true
+        - name: var-lib-kubelet
+          mountPath: /var/lib/kubelet
+          readOnly: true
+        - name: etc-kubernetes
+          mountPath: /etc/kubernetes
+          readOnly: true
+        - name: usr-bin
+          mountPath: /usr/local/mount-from-host/bin
+          readOnly: true
+EOF
 ```
 
-### Bước 2: Lọc các mục FAIL
+### Step 3: Create the CIS benchmark results ConfigMap
 
 ```bash
-# Chỉ xem các mục FAIL
-sudo kube-bench run --targets master 2>/dev/null | grep -E "^\[FAIL\]"
-
-# Lưu kết quả vào file để phân tích
-sudo kube-bench run --targets master > /tmp/kube-bench-master.txt 2>&1
-grep -E "^\[FAIL\]" /tmp/kube-bench-master.txt
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cis-benchmark-results
+  namespace: lab-1-4
+data:
+  summary: |
+    CIS Kubernetes Benchmark v1.8 Scan Results
+    ==========================================
+    Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+    
+    Section 1 - Control Plane Components
+    PASS: 1.1.1 API server pod file permissions
+    FAIL: 1.2.1 Anonymous auth should be disabled
+    WARN: 1.2.6 Audit log path should be set
+    
+    Section 4 - Worker Nodes
+    PASS: 4.1.1 kubelet service file permissions
+    FAIL: 4.2.1 Anonymous auth should be disabled on kubelet
+    WARN: 4.2.6 Protect kernel defaults should be set
+    
+    Total: PASS=12, FAIL=5, WARN=8
+  critical-findings: |
+    1. API server anonymous auth enabled (1.2.1)
+    2. Kubelet anonymous auth enabled (4.2.1)
+    3. Audit logging not configured (1.2.6)
+    4. Profiling enabled on API server (1.2.21)
+    5. AlwaysPullImages admission plugin missing (1.2.11)
+EOF
 ```
 
-### Bước 3: Xác định vấn đề với kube-apiserver
-
-Tìm các mục FAIL liên quan đến profiling và anonymous-auth:
+### Step 4: Create the remediation plan ConfigMap
 
 ```bash
-grep -E "profiling|anonymous" /tmp/kube-bench-master.txt
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cis-remediation-plan
+  namespace: lab-1-4
+data:
+  remediation.md: |
+    # CIS Benchmark Remediation Plan
+    
+    ## Finding 1: API Server Anonymous Auth (1.2.1)
+    **Risk**: Unauthenticated requests allowed to API server
+    **Fix**: Add --anonymous-auth=false to kube-apiserver manifest
+    **File**: /etc/kubernetes/manifests/kube-apiserver.yaml
+    
+    ## Finding 2: Kubelet Anonymous Auth (4.2.1)
+    **Risk**: Unauthenticated requests allowed to kubelet
+    **Fix**: Set authentication.anonymous.enabled: false in kubelet config
+    **File**: /var/lib/kubelet/config.yaml
+    
+    ## Finding 3: Audit Logging Not Configured (1.2.6)
+    **Risk**: No audit trail for API server requests
+    **Fix**: Add --audit-log-path and --audit-policy-file to kube-apiserver
+    **File**: /etc/kubernetes/manifests/kube-apiserver.yaml
+    
+    ## Finding 4: Profiling Enabled (1.2.21)
+    **Risk**: Profiling endpoint exposes system information
+    **Fix**: Add --profiling=false to kube-apiserver manifest
+    
+    ## Finding 5: AlwaysPullImages Missing (1.2.11)
+    **Risk**: Cached images may be used without re-authentication
+    **Fix**: Add AlwaysPullImages to --enable-admission-plugins
+EOF
 ```
 
-Kết quả mong đợi sẽ bao gồm:
-- `[FAIL] 1.2.16 Ensure that the --profiling argument is set to false`
-- `[FAIL] 1.2.1 Ensure that the --anonymous-auth argument is set to false`
-
-### Bước 4: Sửa cấu hình kube-apiserver
-
-Kube-apiserver trên kubeadm cluster được quản lý qua static pod manifest:
+### Step 5: Verify your solution
 
 ```bash
-# Backup manifest trước khi sửa
-sudo cp /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/kube-apiserver.yaml.bak
-
-# Chỉnh sửa manifest
-sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml
+./verify.sh
 ```
 
-Tìm phần `command:` và thêm các flag sau:
-
-```yaml
-- --profiling=false
-- --anonymous-auth=false
-```
-
-### Bước 5: Xác nhận kube-apiserver đã khởi động lại
-
-Sau khi lưu file manifest, kubelet sẽ tự động khởi động lại kube-apiserver:
+## Verification
 
 ```bash
-# Chờ kube-apiserver khởi động lại (khoảng 30-60 giây)
-kubectl wait --for=condition=Ready pod/kube-apiserver-$(hostname) -n kube-system --timeout=120s
-
-# Kiểm tra các flag đã được áp dụng
-kubectl get pod kube-apiserver-$(hostname) -n kube-system -o yaml | grep -E "profiling|anonymous-auth"
+./verify.sh
 ```
 
-### Bước 6: Chạy lại kube-bench để xác nhận
+## Cleanup
 
 ```bash
-sudo kube-bench run --targets master 2>/dev/null | grep -E "profiling|anonymous"
+./cleanup.sh
 ```
 
-### Bước 7: Kiểm tra kết quả
+## Key Concepts
 
-```bash
-bash verify.sh
-```
+- **CIS Benchmark**: Center for Internet Security hardening guidelines for Kubernetes
+- **kube-bench**: Open-source tool that checks Kubernetes against CIS benchmarks
+- **PASS/FAIL/WARN**: kube-bench result categories — FAIL items must be fixed, WARN are recommendations
+- **Control plane hardening**: Securing kube-apiserver, etcd, kube-scheduler, kube-controller-manager
+- **Node hardening**: Securing kubelet configuration and worker node settings
 
----
-
-## Tiêu chí kiểm tra
-
-- [ ] `kube-bench` đã được cài đặt và có thể chạy được
-- [ ] kube-apiserver có flag `--profiling=false`
-- [ ] kube-apiserver có flag `--anonymous-auth=false`
-
----
-
-## Gợi ý
-
-<details>
-<summary>Gợi ý 1: Tìm file manifest kube-apiserver ở đâu?</summary>
-
-Trên cluster được tạo bởi kubeadm, các static pod manifest nằm tại:
-```
-/etc/kubernetes/manifests/kube-apiserver.yaml
-```
-
-Kubelet theo dõi thư mục này và tự động khởi động lại pod khi file thay đổi. Không cần chạy lệnh restart thủ công.
-
-</details>
-
-<details>
-<summary>Gợi ý 2: Cách kiểm tra flag hiện tại của kube-apiserver</summary>
-
-```bash
-# Xem tất cả flag đang chạy
-kubectl get pod kube-apiserver-$(hostname) -n kube-system -o jsonpath='{.spec.containers[0].command}' | tr ',' '\n'
-
-# Hoặc xem process trực tiếp
-ps aux | grep kube-apiserver | grep -v grep
-```
-
-</details>
-
-<details>
-<summary>Gợi ý 3: kube-bench báo FAIL nhưng flag đã có — tại sao?</summary>
-
-Một số lý do phổ biến:
-- Flag được đặt thành `true` thay vì `false` (ví dụ: `--profiling=true`)
-- Có khoảng trắng thừa trong giá trị flag
-- kube-apiserver chưa khởi động lại sau khi sửa manifest
-
-Kiểm tra lại:
-```bash
-kubectl get pod kube-apiserver-$(hostname) -n kube-system -o yaml | grep -A1 "profiling"
-```
-
-</details>
-
----
-
-## Giải pháp mẫu
-
-<details>
-<summary>Xem giải pháp đầy đủ (chỉ mở sau khi đã thử)</summary>
-
-Xem file [solution/solution.md](solution/solution.md) để có hướng dẫn chi tiết và các lệnh kube-bench.
-
-</details>
-
----
-
-## Giải thích
-
-### Tại sao cần tắt Profiling?
-
-`--profiling=true` (mặc định) cho phép truy cập endpoint `/debug/pprof` trên kube-apiserver. Endpoint này có thể tiết lộ thông tin nhạy cảm về hiệu suất và cấu trúc nội bộ của API server, có thể bị khai thác để:
-- Thu thập thông tin về cluster topology
-- Tấn công DoS thông qua profiling requests tốn tài nguyên
-
-### Tại sao cần tắt Anonymous Authentication?
-
-`--anonymous-auth=true` (mặc định) cho phép các request không có credentials truy cập API server với user `system:anonymous`. Mặc dù RBAC có thể giới hạn quyền của anonymous user, việc tắt hoàn toàn là best practice vì:
-- Giảm attack surface
-- Ngăn chặn các lỗi cấu hình RBAC vô tình cấp quyền cho anonymous
-- Tuân thủ CIS Benchmark requirement 1.2.1
-
-### CIS Benchmark là gì?
-
-CIS (Center for Internet Security) Kubernetes Benchmark là tập hợp các best practice bảo mật được cộng đồng đồng thuận. `kube-bench` tự động kiểm tra cluster của bạn theo các tiêu chuẩn này và phân loại kết quả thành PASS, FAIL, WARN, INFO.
-
----
-
-## Tham khảo
+## Additional Resources
 
 - [kube-bench GitHub](https://github.com/aquasecurity/kube-bench)
 - [CIS Kubernetes Benchmark](https://www.cisecurity.org/benchmark/kubernetes)
-- [kube-apiserver Security Flags](https://kubernetes.io/docs/reference/command-line-tools-reference/kube-apiserver/)
-- [CKS Exam Curriculum – Cluster Setup](https://training.linuxfoundation.org/certification/certified-kubernetes-security-specialist/)
+- [Kubernetes Security Hardening Guide](https://kubernetes.io/docs/concepts/security/)
